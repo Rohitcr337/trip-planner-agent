@@ -35,6 +35,7 @@ Deploy: Docker, GitHub Actions CI, free hosting.
 - Keep the repo clean: no dead code, no unrequested features.
 - If something in the brief is unclear or a free API fails, say so and ask
   instead of guessing.
+- Commit using the repository's existing Git config (user.name and user.email). Never set or override the author.
 
 ## How to work (apply to every phase)
 - Work through the phase's tasks in order. After each task: run its tests,
