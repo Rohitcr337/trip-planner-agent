@@ -3,7 +3,7 @@
 ## Phase 1: Foundations
 [x] 1.1 Project skeleton, requirements, .gitignore, .env.example, git init
 [x] 1.2 llm.py: ask() with disk cache + test
-[ ] 1.3 state.py (TripState) and schemas.py (TripRequest)
+[x] 1.3 state.py (TripState) and schemas.py (TripRequest)
 [ ] 1.4 intake node + 3 tests
 [ ] 1.5 One-step graph + test
 [ ] 1.6 FastAPI: /health and /plan/intake + tests
