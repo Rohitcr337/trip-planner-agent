@@ -5,7 +5,7 @@
 [x] 1.2 llm.py: ask() with disk cache + test
 [x] 1.3 state.py (TripState) and schemas.py (TripRequest)
 [x] 1.4 intake node + 3 tests
-[ ] 1.5 One-step graph + test
+[x] 1.5 One-step graph + test
 [ ] 1.6 FastAPI: /health and /plan/intake + tests
 [ ] 1.7 Review against rules, push to GitHub
 
