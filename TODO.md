@@ -6,7 +6,7 @@
 [x] 1.3 state.py (TripState) and schemas.py (TripRequest)
 [x] 1.4 intake node + 3 tests
 [x] 1.5 One-step graph + test
-[ ] 1.6 FastAPI: /health and /plan/intake + tests
+[x] 1.6 FastAPI: /health and /plan/intake + tests
 [ ] 1.7 Review against rules, push to GitHub
 
 ## Phase 2: RAG
