@@ -41,12 +41,9 @@ Deploy: Docker, GitHub Actions CI, free hosting.
 - Work through the phase's tasks in order. After each task: run its tests,
   tick it in TODO.md, and make a git commit with a clear message.
 - TODO.md lists every phase and task as checkboxes. Create it in Phase 1.
-- At the END of each phase, STOP and print:
-  1. What was built (a few lines, plain language).
-  2. Verify: the exact commands I should run and what I should see.
-  3. Three "explain it back" questions about this phase. Do not answer
-     them unless I ask.
-  4. Anything uncertain, skipped, or that deviates from the brief.
+- At the END of each phase, after its last task is done and the tests pass:
+  1. Update LEARNING.md (create it in Phase 1, add it to .gitignore, and never commit it). Add sections only for the files and concepts introduced in this phase, written for a complete beginner in plain language: what each file does, how it connects to the others, and the concepts behind it (2 to 3 sentences each, and why the project needs it). After each section add a "Questions and answers" part where every question is followed immediately by its answer (4 to 5 per section). Update the glossary and the big-picture section. Do not rewrite earlier sections. Keep the addition under 120 lines. Use what is already in context and re-read files only if needed. Never open, print or copy the contents of .env.
+  2. Then STOP and print: (a) what was built, in a few lines; (b) Verify: the exact commands I should run and what I should see; (c) anything uncertain, skipped, or that deviates from the brief.
   Then wait. Do not start the next phase until I paste the starter prompt.
 
 ## Phases
