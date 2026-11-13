@@ -9,9 +9,6 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 
-SUPPORTED_DESTINATIONS = ("Jaipur", "Chennai", "Goa")
-
-
 class TripRequest(BaseModel):
     """A validated trip planning request."""
 
