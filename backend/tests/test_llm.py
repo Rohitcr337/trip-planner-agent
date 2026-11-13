@@ -1,18 +1,23 @@
 """
-Tests for llm.py — task 1.2 / SDK update.
+Tests for llm.py — retry logic, client error handling, caching.
 
 Covers:
 - cache hit: second call returns cached response, no API call made
 - cache miss: API is called via google-genai Client, response cached, text returned
 - timeout & HTTP options: verify 30-second timeout configuration
-- retries: at most 2 retries on failure before raising RuntimeError with clear message
+- retries on timeouts: recovers on retry, or raises after max attempts
+- retries on 5xx server errors: recovers on retry, or raises after max attempts
+- client errors (400, 401, 403, 404, 429): do NOT retry, raise immediately
+  with status code and status text; for 429, include the reported retry delay
 - missing API key: RuntimeError raised before any API call
 """
 import json
 import os
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
+from google.genai import errors
 
 
 # ---------------------------------------------------------------------------
@@ -130,22 +135,21 @@ class TestCacheMiss:
         mock_client.models.generate_content.assert_called_once()
 
 
-class TestRetriesAndErrors:
-    def test_retries_on_failure_and_succeeds(self, tmp_path, monkeypatch):
-        """Should retry on transient failure up to 2 times and succeed if an attempt passes."""
+class TestRetryableErrors:
+    def test_retries_on_timeout_and_succeeds(self, tmp_path, monkeypatch):
+        """Should retry on timeout errors and succeed if a later attempt passes."""
         import backend.app.llm as llm_mod
 
         monkeypatch.setenv("LLM_API_KEY", "test-key")
         monkeypatch.setattr(llm_mod, "_CACHE_DIR", str(tmp_path))
 
-        prompt, model = "Flaky prompt", "gemini-1.5-flash"
+        prompt, model = "Timeout prompt", "gemini-1.5-flash"
 
         mock_client = MagicMock()
         mock_response = MagicMock()
-        mock_response.text = "recovered"
-        # Fail once, then succeed on second attempt (1st retry)
+        mock_response.text = "recovered from timeout"
         mock_client.models.generate_content.side_effect = [
-            RuntimeError("Temporary network glitch"),
+            httpx.ReadTimeout("Request timed out after 30s"),
             mock_response,
         ]
 
@@ -153,21 +157,51 @@ class TestRetriesAndErrors:
              patch("backend.app.llm.time.sleep") as mock_sleep:
             result = llm_mod.ask(prompt, model)
 
-        assert result == "recovered"
+        assert result == "recovered from timeout"
         assert mock_client.models.generate_content.call_count == 2
         mock_sleep.assert_called_once_with(1)
 
-    def test_raises_after_max_retries_exceeded(self, tmp_path, monkeypatch):
-        """Fails 3 times (initial + 2 retries) and raises RuntimeError with clear message."""
+    def test_retries_on_5xx_server_error_and_succeeds(self, tmp_path, monkeypatch):
+        """Should retry on 5xx server errors (like 503 Service Unavailable) and succeed."""
         import backend.app.llm as llm_mod
 
         monkeypatch.setenv("LLM_API_KEY", "test-key")
         monkeypatch.setattr(llm_mod, "_CACHE_DIR", str(tmp_path))
 
-        prompt, model = "Failing prompt", "gemini-1.5-flash"
+        prompt, model = "503 prompt", "gemini-1.5-flash"
 
+        server_err = errors.ServerError(
+            503,
+            {"error": {"code": 503, "message": "Service Unavailable", "status": "UNAVAILABLE"}},
+        )
         mock_client = MagicMock()
-        mock_client.models.generate_content.side_effect = ConnectionError("Connection timed out")
+        mock_response = MagicMock()
+        mock_response.text = "recovered from 503"
+        mock_client.models.generate_content.side_effect = [server_err, mock_response]
+
+        with patch("backend.app.llm.genai.Client", return_value=mock_client), \
+             patch("backend.app.llm.time.sleep") as mock_sleep:
+            result = llm_mod.ask(prompt, model)
+
+        assert result == "recovered from 503"
+        assert mock_client.models.generate_content.call_count == 2
+        mock_sleep.assert_called_once_with(1)
+
+    def test_fails_after_max_retries_on_persistent_5xx(self, tmp_path, monkeypatch):
+        """Fails 3 times (initial + 2 retries) on persistent 5xx and raises RuntimeError."""
+        import backend.app.llm as llm_mod
+
+        monkeypatch.setenv("LLM_API_KEY", "test-key")
+        monkeypatch.setattr(llm_mod, "_CACHE_DIR", str(tmp_path))
+
+        prompt, model = "Persistent 500", "gemini-1.5-flash"
+
+        server_err = errors.ServerError(
+            500,
+            {"error": {"code": 500, "message": "Internal Server Error", "status": "INTERNAL"}},
+        )
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = server_err
 
         with patch("backend.app.llm.genai.Client", return_value=mock_client), \
              patch("backend.app.llm.time.sleep") as mock_sleep:
@@ -176,9 +210,109 @@ class TestRetriesAndErrors:
 
         err_msg = str(exc_info.value)
         assert "Gemini API call failed after 3 attempts" in err_msg
-        assert "Connection timed out" in err_msg
+        assert "500" in err_msg
         assert mock_client.models.generate_content.call_count == 3
         assert mock_sleep.call_count == 2
+
+
+class TestNonRetryableClientErrors:
+    @pytest.mark.parametrize("status_code,status_text,msg", [
+        (400, "INVALID_ARGUMENT", "Invalid argument provided"),
+        (401, "UNAUTHENTICATED", "Invalid API key"),
+        (403, "PERMISSION_DENIED", "Access denied"),
+        (404, "NOT_FOUND", "Model not found"),
+    ])
+    def test_client_errors_do_not_retry_and_raise_immediately(
+        self, tmp_path, monkeypatch, status_code, status_text, msg
+    ):
+        """4xx client errors (400, 401, 403, 404) must raise immediately without retrying."""
+        import backend.app.llm as llm_mod
+
+        monkeypatch.setenv("LLM_API_KEY", "test-key")
+        monkeypatch.setattr(llm_mod, "_CACHE_DIR", str(tmp_path))
+
+        client_err = errors.ClientError(
+            status_code,
+            {"error": {"code": status_code, "message": msg, "status": status_text}},
+        )
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = client_err
+
+        with patch("backend.app.llm.genai.Client", return_value=mock_client), \
+             patch("backend.app.llm.time.sleep") as mock_sleep:
+            with pytest.raises(RuntimeError) as exc_info:
+                llm_mod.ask("Prompt", "gemini-1.5-flash")
+
+        err_msg = str(exc_info.value)
+        assert str(status_code) in err_msg
+        assert status_text in err_msg
+        # Must NOT retry — called only once, no sleep
+        assert mock_client.models.generate_content.call_count == 1
+        mock_sleep.assert_not_called()
+
+    def test_429_raises_immediately_with_retry_delay_from_details(self, tmp_path, monkeypatch):
+        """429 Resource Exhausted must not retry and must include the retry delay in the message."""
+        import backend.app.llm as llm_mod
+
+        monkeypatch.setenv("LLM_API_KEY", "test-key")
+        monkeypatch.setattr(llm_mod, "_CACHE_DIR", str(tmp_path))
+
+        resp_json = {
+            "error": {
+                "code": 429,
+                "message": "Resource has been exhausted (e.g. check quota).",
+                "status": "RESOURCE_EXHAUSTED",
+                "details": [
+                    {
+                        "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                        "retryDelay": "23.45s",
+                    }
+                ],
+            }
+        }
+        client_err = errors.ClientError(429, resp_json)
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = client_err
+
+        with patch("backend.app.llm.genai.Client", return_value=mock_client), \
+             patch("backend.app.llm.time.sleep") as mock_sleep:
+            with pytest.raises(RuntimeError) as exc_info:
+                llm_mod.ask("Prompt", "gemini-1.5-flash")
+
+        err_msg = str(exc_info.value)
+        assert "429" in err_msg
+        assert "RESOURCE_EXHAUSTED" in err_msg
+        assert "23.45s" in err_msg
+        # Must NOT retry
+        assert mock_client.models.generate_content.call_count == 1
+        mock_sleep.assert_not_called()
+
+    def test_429_raises_immediately_with_retry_delay_from_header(self, tmp_path, monkeypatch):
+        """429 with Retry-After header must include the delay in the message."""
+        import backend.app.llm as llm_mod
+
+        monkeypatch.setenv("LLM_API_KEY", "test-key")
+        monkeypatch.setattr(llm_mod, "_CACHE_DIR", str(tmp_path))
+
+        resp = httpx.Response(
+            429,
+            headers={"retry-after": "15"},
+            json={"error": {"code": 429, "message": "Rate limit exceeded", "status": "RESOURCE_EXHAUSTED"}},
+        )
+        client_err = errors.ClientError(429, resp.json(), resp)
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = client_err
+
+        with patch("backend.app.llm.genai.Client", return_value=mock_client), \
+             patch("backend.app.llm.time.sleep") as mock_sleep:
+            with pytest.raises(RuntimeError) as exc_info:
+                llm_mod.ask("Prompt", "gemini-1.5-flash")
+
+        err_msg = str(exc_info.value)
+        assert "429" in err_msg
+        assert "15" in err_msg
+        assert mock_client.models.generate_content.call_count == 1
+        mock_sleep.assert_not_called()
 
 
 class TestMissingApiKey:
