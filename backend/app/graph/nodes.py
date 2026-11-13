@@ -11,6 +11,7 @@ import time
 
 from pydantic import ValidationError
 
+from backend.app.graph.state import TripState
 from backend.app.llm import ask
 from backend.app.schemas import TripRequest
 
@@ -53,7 +54,7 @@ def _extract_json(text: str) -> dict:
 
 # ── Nodes ─────────────────────────────────────────────────────────────────────
 
-def intake(state: dict) -> dict:
+def intake(state: TripState) -> TripState:
     """
     Intake node: parse and validate the user's raw input.
 
