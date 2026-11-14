@@ -12,3 +12,5 @@ dist/
 build/
 *.egg-info/
 LEARNING.md
+BUILD_BRIEF.md
+TODO.md
