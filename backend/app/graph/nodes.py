@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from backend.app.graph.state import TripState
 from backend.app.llm import ask
+from backend.app.retrieve import retrieve
 from backend.app.schemas import TripRequest
 
 logger = logging.getLogger(__name__)
@@ -95,3 +96,21 @@ def intake(state: TripState) -> TripState:
         elapsed = time.perf_counter() - t0
         _log(node, short_in, f"feedback: {reason[:80]}", elapsed)
         return {"feedback": [reason]}
+
+
+def retrieve_node(state: TripState) -> TripState:
+    """Retrieve guide passages for the validated destination and interests."""
+    t0 = time.perf_counter()
+    request = state.get("request")
+    if not request:
+        _log("retrieve", "no request", "skipped", time.perf_counter() - t0)
+        return state
+
+    destination = request["destination"]
+    interests = request.get("interests", [])
+    query = " ".join([destination, *interests])
+    passages = retrieve(destination, query)
+    result = dict(state)
+    result["passages"] = passages
+    _log("retrieve", query[:80], f"{len(passages)} passages", time.perf_counter() - t0)
+    return result

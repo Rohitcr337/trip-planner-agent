@@ -9,7 +9,7 @@ The compiled graph is exposed as `graph` for import by other modules.
 """
 from langgraph.graph import END, StateGraph
 
-from backend.app.graph.nodes import intake
+from backend.app.graph.nodes import intake, retrieve_node
 from backend.app.graph.state import TripState
 
 # ── Build ─────────────────────────────────────────────────────────────────────
@@ -18,10 +18,11 @@ def build_graph() -> StateGraph:
     """Construct and compile the trip-planner workflow graph."""
     builder = StateGraph(TripState)
 
-    # Phase 1 — single intake node
     builder.add_node("intake", intake)
+    builder.add_node("retrieve", retrieve_node)
     builder.set_entry_point("intake")
-    builder.add_edge("intake", END)
+    builder.add_edge("intake", "retrieve")
+    builder.add_edge("retrieve", END)
 
     return builder.compile()
 

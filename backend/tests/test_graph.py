@@ -62,6 +62,7 @@ class TestGraphStructure:
         g = build_graph()
         # LangGraph 0.1.x exposes nodes via .nodes dict on the compiled graph
         assert "intake" in g.nodes
+        assert "retrieve" in g.nodes
 
     def test_imported_graph_is_compiled(self):
         from backend.app.graph.build import graph
@@ -103,3 +104,12 @@ class TestGraphExecution:
             result = g.invoke(state)   # must not raise
 
         assert "feedback" in result
+
+    def test_graph_skips_retrieval_after_intake_failure(self):
+        g = build_graph()
+        state = _initial_state()
+
+        with patch("backend.app.graph.nodes.ask", return_value="not json at all"):
+            result = g.invoke(state)
+
+        assert result["passages"] == []
