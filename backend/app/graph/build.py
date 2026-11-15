@@ -7,7 +7,7 @@ does not run later steps.
 """
 from langgraph.graph import END, StateGraph
 
-from backend.app.graph.nodes import fetch_node, intake, retrieve_node
+from backend.app.graph.nodes import draft_node, fetch_node, intake, retrieve_node
 from backend.app.graph.state import TripState
 
 
@@ -33,7 +33,9 @@ def build_intake_graph():
 def build_planning_graph():
     """Compile the planning graph. Callers that plan a full trip use this graph."""
     builder = _base_builder()
-    builder.add_edge("fetch", END)
+    builder.add_node("draft_itinerary", draft_node)
+    builder.add_edge("fetch", "draft_itinerary")
+    builder.add_edge("draft_itinerary", END)
     return builder.compile()
 
 

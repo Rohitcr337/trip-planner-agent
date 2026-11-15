@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from backend.app.costs import load_costs
 from backend.app.graph.state import TripState
+from backend.app.itinerary import Itinerary, Source, build_draft_prompt
 from backend.app.llm import ask
 from backend.app.retrieve import retrieve
 from backend.app.schemas import TripRequest
@@ -164,3 +165,43 @@ def fetch_node(state: TripState) -> TripState:
         time.perf_counter() - t0,
     )
     return result
+
+
+def draft_node(state: TripState) -> TripState:
+    """Create and verify a structured itinerary draft from retrieved evidence."""
+    t0 = time.perf_counter()
+    request = state.get("request")
+    if not request:
+        _log("draft", "no request", "skipped", time.perf_counter() - t0)
+        return state
+
+    try:
+        raw = ask(build_draft_prompt(state))
+        itinerary = Itinerary.model_validate(_extract_json(raw))
+        passages = state.get("passages") or []
+        for stop in (stop for day in itinerary.days for stop in day.stops):
+            valid_ids = sorted(
+                {passage_id for passage_id in stop.passage_ids
+                 if 1 <= passage_id <= len(passages)}
+            )
+            stop.passage_ids = valid_ids
+            stop.sources = [
+                Source(
+                    source_name=passages[passage_id - 1]["source_name"],
+                    source_url=passages[passage_id - 1]["source_url"],
+                    section=passages[passage_id - 1]["section"],
+                )
+                for passage_id in valid_ids
+            ]
+            stop.unverified = not stop.sources
+
+        result = dict(state)
+        result["draft"] = itinerary.model_dump(mode="json")
+        _log("draft", request["destination"], f"{len(itinerary.days)} days", time.perf_counter() - t0)
+        return result
+    except (ValidationError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        result = dict(state)
+        result["draft"] = None
+        result["feedback"] = [*state.get("feedback", []), f"Draft could not be created: {exc}"]
+        _log("draft", request["destination"], "feedback", time.perf_counter() - t0)
+        return result

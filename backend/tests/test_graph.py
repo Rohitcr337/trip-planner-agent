@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from backend.app.graph.build import build_graph
+from backend.app.graph.build import build_graph, build_planning_graph
 from backend.app.graph.state import TripState
 
 # ---------------------------------------------------------------------------
@@ -67,6 +67,10 @@ class TestGraphStructure:
     def test_graph_has_fetch_node(self):
         g = build_graph()
         assert "fetch" in g.nodes
+
+    def test_planning_graph_has_draft_but_intake_graph_does_not(self):
+        assert "draft_itinerary" not in build_graph().nodes
+        assert "draft_itinerary" in build_planning_graph().nodes
 
     def test_imported_graph_is_compiled(self):
         from backend.app.graph.build import graph

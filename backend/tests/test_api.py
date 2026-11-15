@@ -92,6 +92,12 @@ class TestIntakeEndpointSuccess:
             resp = client.post("/plan/intake", json={"user_input": {"raw": "4 days in Goa"}})
         assert "feedback" not in resp.json()
 
+    def test_valid_input_does_not_call_draft(self):
+        with patch("backend.app.graph.nodes.ask", return_value=VALID_JSON) as mocked_ask:
+            resp = client.post("/plan/intake", json={"user_input": {"raw": "4 days in Goa"}})
+        assert resp.status_code == 200
+        assert mocked_ask.call_count == 1
+
 
 # ---------------------------------------------------------------------------
 # POST /plan/intake — failures → 422
