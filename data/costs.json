@@ -1,30 +1,30 @@
 {
   "note": "Estimates only; maintained by hand.",
   "Jaipur": {
-    "meal_budget": null,
-    "meal_mid": null,
-    "local_transport_per_day": null,
-    "typical_entry_fee_low": null,
-    "typical_entry_fee_high": null,
-    "stay_budget_per_night": null,
-    "stay_mid_per_night": null
+    "meal_budget": 150,
+    "meal_mid": 400,
+    "local_transport_per_day": 300,
+    "typical_entry_fee_low": 50,
+    "typical_entry_fee_high": 500,
+    "stay_budget_per_night": 700,
+    "stay_mid_per_night": 1800
   },
   "Chennai": {
-    "meal_budget": null,
-    "meal_mid": null,
-    "local_transport_per_day": null,
-    "typical_entry_fee_low": null,
-    "typical_entry_fee_high": null,
-    "stay_budget_per_night": null,
-    "stay_mid_per_night": null
+    "meal_budget": 120,
+    "meal_mid": 350,
+    "local_transport_per_day": 250,
+    "typical_entry_fee_low": 30,
+    "typical_entry_fee_high": 300,
+    "stay_budget_per_night": 800,
+    "stay_mid_per_night": 2000
   },
   "Goa": {
-    "meal_budget": null,
-    "meal_mid": null,
-    "local_transport_per_day": null,
-    "typical_entry_fee_low": null,
-    "typical_entry_fee_high": null,
-    "stay_budget_per_night": null,
-    "stay_mid_per_night": null
+    "meal_budget": 200,
+    "meal_mid": 600,
+    "local_transport_per_day": 600,
+    "typical_entry_fee_low": 50,
+    "typical_entry_fee_high": 300,
+    "stay_budget_per_night": 800,
+    "stay_mid_per_night": 2200
   }
 }
