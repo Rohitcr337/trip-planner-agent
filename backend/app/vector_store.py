@@ -93,7 +93,14 @@ class NumpyStore(VectorStore):
         query_norm = np.linalg.norm(query_vector)
         if query_norm == 0:
             return []
-        scores = self.vectors[candidates].dot(query_vector) / (norms * query_norm)
+        scores = np.zeros(len(candidates), dtype=float)
+        denominator = norms * query_norm
+        np.divide(
+            self.vectors[candidates].dot(query_vector),
+            denominator,
+            out=scores,
+            where=denominator != 0,
+        )
         ranked = sorted(
             zip(candidates, scores), key=lambda item: float(item[1]), reverse=True
         )[:k]

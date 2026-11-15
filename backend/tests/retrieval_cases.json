@@ -1,0 +1,22 @@
+[
+  {"city": "Jaipur", "question": "Why is Jaipur called the Pink City?", "expected_snippet": "Pink City"},
+  {"city": "Jaipur", "question": "Which months bring Jaipur's monsoon?", "expected_snippet": "June to September"},
+  {"city": "Jaipur", "question": "Which trains are popular from Delhi to Jaipur?", "expected_snippet": "Vande Bharat and Shatabdi Express trains"},
+  {"city": "Jaipur", "question": "How long is the drive from Delhi to Jaipur?", "expected_snippet": "takes less than 4 hr"},
+  {"city": "Jaipur", "question": "What fares does the Jaipur Metro charge?", "expected_snippet": "Fares range between ₹5 and ₹25."},
+  {"city": "Jaipur", "question": "Which historic sites can an autorickshaw reach outside the city?", "expected_snippet": "Amber Fort or Galtaji"},
+  {"city": "Jaipur", "question": "What does the full-day RTDC tour cost?", "expected_snippet": "costs ₹600"},
+  {"city": "Chennai", "question": "What was Chennai formerly called?", "expected_snippet": "Madras"},
+  {"city": "Chennai", "question": "On what date does Chennai celebrate its birthday?", "expected_snippet": "22 August"},
+  {"city": "Chennai", "question": "What is the classical music tradition of South India called?", "expected_snippet": "Carnatic music"},
+  {"city": "Chennai", "question": "When does the Chennai Music Festival take place?", "expected_snippet": "mid-December to mid-January"},
+  {"city": "Chennai", "question": "What is Chennai's staple food?", "expected_snippet": "staple food in the city is **rice**"},
+  {"city": "Chennai", "question": "Which famous Chettinad chicken dish is mentioned?", "expected_snippet": "Chettinad Pepper Chicken"},
+  {"city": "Chennai", "question": "How many temples does Chennai have?", "expected_snippet": "over 15,000 temples"},
+  {"city": "Goa", "question": "When is the best time to visit Goa?", "expected_snippet": "mid-November to mid-February"},
+  {"city": "Goa", "question": "What is Goa's staple diet?", "expected_snippet": "fish, curry and rice"},
+  {"city": "Goa", "question": "Which languages do most Goans speak?", "expected_snippet": "Konkani, English, Hindi, and Marathi"},
+  {"city": "Goa", "question": "How many airports serve Goa?", "expected_snippet": "two airports"},
+  {"city": "Goa", "question": "When is swimming considered safe in Goa?", "expected_snippet": "November to early May"},
+  {"city": "Goa", "question": "What do Goa bus fares often cost?", "expected_snippet": "₹4-6"}
+]
