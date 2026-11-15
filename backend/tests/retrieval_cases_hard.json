@@ -1,0 +1,22 @@
+[
+  {"group": 1, "city": "Jaipur", "query": "What nickname did the painted old quarter earn?", "expected_snippet": "Pink City"},
+  {"group": 1, "city": "Jaipur", "query": "Which outlying attractions are reachable by tuk-tuk?", "expected_snippet": "Amber Fort or Galtaji"},
+  {"group": 1, "city": "Chennai", "query": "Which former name did the metropolis use?", "expected_snippet": "Madras"},
+  {"group": 1, "city": "Chennai", "query": "What classical dance has over 1,000 performances each year?", "expected_snippet": "Bharatanatyam"},
+  {"group": 1, "city": "Goa", "query": "When are beach waters considered safest?", "expected_snippet": "November to early May"},
+  {"group": 1, "city": "Goa", "query": "Where is the Portuguese-influenced historic district?", "expected_snippet": "Latin quarter of Panjim"},
+  {"group": 2, "city": "Jaipur", "query": "Jaipur shopping food", "expected_snippet": "Bapu & Johari"},
+  {"group": 2, "city": "Jaipur", "query": "Jaipur forts history", "expected_snippet": "Amber Fort"},
+  {"group": 2, "city": "Jaipur", "query": "Jaipur markets crafts", "expected_snippet": "semi-precious gems"},
+  {"group": 2, "city": "Chennai", "query": "Chennai beaches music", "expected_snippet": "Marina Beach"},
+  {"group": 2, "city": "Chennai", "query": "Chennai food culture", "expected_snippet": "Chettinad Pepper Chicken"},
+  {"group": 2, "city": "Chennai", "query": "Chennai shopping street", "expected_snippet": "Pondy Bazaar"},
+  {"group": 2, "city": "Goa", "query": "Goa beaches nightlife", "expected_snippet": "Nightlife is vibrant here."},
+  {"group": 2, "city": "Goa", "query": "Goa museums art", "expected_snippet": "Goa Chitra Museum"},
+  {"group": 2, "city": "Goa", "query": "Goa wildlife waterfalls", "expected_snippet": "Dudh Sagar Waterfall"},
+  {"group": 3, "city": "Jaipur", "query": "quantum teleportation permits"},
+  {"group": 3, "city": "Jaipur", "query": "lunar hotel docking fees"},
+  {"group": 3, "city": "Chennai", "query": "underwater hotel gravity rules"},
+  {"group": 3, "city": "Chennai", "query": "robot guide licensing"},
+  {"group": 3, "city": "Goa", "query": "asteroid landing permits"}
+]
