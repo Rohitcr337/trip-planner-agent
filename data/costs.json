@@ -1,0 +1,30 @@
+{
+  "note": "Estimates only; maintained by hand.",
+  "Jaipur": {
+    "meal_budget": null,
+    "meal_mid": null,
+    "local_transport_per_day": null,
+    "typical_entry_fee_low": null,
+    "typical_entry_fee_high": null,
+    "stay_budget_per_night": null,
+    "stay_mid_per_night": null
+  },
+  "Chennai": {
+    "meal_budget": null,
+    "meal_mid": null,
+    "local_transport_per_day": null,
+    "typical_entry_fee_low": null,
+    "typical_entry_fee_high": null,
+    "stay_budget_per_night": null,
+    "stay_mid_per_night": null
+  },
+  "Goa": {
+    "meal_budget": null,
+    "meal_mid": null,
+    "local_transport_per_day": null,
+    "typical_entry_fee_low": null,
+    "typical_entry_fee_high": null,
+    "stay_budget_per_night": null,
+    "stay_mid_per_night": null
+  }
+}
