@@ -9,7 +9,7 @@ The compiled graph is exposed as `graph` for import by other modules.
 """
 from langgraph.graph import END, StateGraph
 
-from backend.app.graph.nodes import intake, retrieve_node
+from backend.app.graph.nodes import fetch_node, intake, retrieve_node
 from backend.app.graph.state import TripState
 
 # ── Build ─────────────────────────────────────────────────────────────────────
@@ -20,9 +20,11 @@ def build_graph() -> StateGraph:
 
     builder.add_node("intake", intake)
     builder.add_node("retrieve", retrieve_node)
+    builder.add_node("fetch", fetch_node)
     builder.set_entry_point("intake")
     builder.add_edge("intake", "retrieve")
-    builder.add_edge("retrieve", END)
+    builder.add_edge("retrieve", "fetch")
+    builder.add_edge("fetch", END)
 
     return builder.compile()
 

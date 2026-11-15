@@ -64,6 +64,10 @@ class TestGraphStructure:
         assert "intake" in g.nodes
         assert "retrieve" in g.nodes
 
+    def test_graph_has_fetch_node(self):
+        g = build_graph()
+        assert "fetch" in g.nodes
+
     def test_imported_graph_is_compiled(self):
         from backend.app.graph.build import graph
         assert graph is not None

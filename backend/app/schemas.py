@@ -4,6 +4,7 @@ schemas.py — Pydantic models for request validation.
 TripRequest is the canonical shape of a validated trip planning request.
 It is used by the intake node and the /plan/intake endpoint.
 """
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -23,6 +24,10 @@ class TripRequest(BaseModel):
     style: Literal["relaxed", "packed"] = Field(
         description="Pacing preference: 'relaxed' or 'packed'."
     )
+    start_date: str | None = Field(
+        default=None,
+        description="Optional trip start date as an ISO date (YYYY-MM-DD).",
+    )
 
     @field_validator("interests")
     @classmethod
@@ -30,3 +35,14 @@ class TripRequest(BaseModel):
         if not v:
             raise ValueError("interests must contain at least one item.")
         return v
+
+    @field_validator("start_date")
+    @classmethod
+    def start_date_must_be_iso(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        try:
+            return date.fromisoformat(v).isoformat()
+        except (TypeError, ValueError) as exc:
+            raise ValueError("start_date must be an ISO date (YYYY-MM-DD).") from exc
+

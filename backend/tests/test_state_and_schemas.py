@@ -96,6 +96,27 @@ class TestTripRequestValid:
         )
         assert len(req.interests) == 3
 
+    def test_optional_start_date_accepted(self):
+        req = TripRequest(
+            destination="Goa",
+            days=2,
+            budget=5000,
+            interests=["beach"],
+            style="relaxed",
+            start_date="2026-12-01",
+        )
+        assert req.start_date == "2026-12-01"
+
+    def test_start_date_defaults_to_none(self):
+        req = TripRequest(
+            destination="Goa",
+            days=2,
+            budget=5000,
+            interests=["beach"],
+            style="relaxed",
+        )
+        assert req.start_date is None
+
 
 # ---------------------------------------------------------------------------
 # TripRequest — invalid cases
@@ -152,3 +173,15 @@ class TestTripRequestInvalid:
                 interests=["beach"],
                 style="moderate",  # not allowed
             )
+
+    def test_rejects_invalid_start_date(self):
+        with pytest.raises(ValidationError) as exc_info:
+            TripRequest(
+                destination="Goa",
+                days=3,
+                budget=5000,
+                interests=["beach"],
+                style="relaxed",
+                start_date="next week",
+            )
+        assert "start_date" in str(exc_info.value)

@@ -144,3 +144,56 @@ class TestIntakeMalformedJSON:
             result = intake(state)
 
         assert "feedback" in result
+
+
+# ---------------------------------------------------------------------------
+# Optional start_date support
+# ---------------------------------------------------------------------------
+
+WITH_DATE_JSON = json.dumps({
+    "destination": "Jaipur",
+    "days": 3,
+    "budget": 8000,
+    "interests": ["history"],
+    "style": "relaxed",
+    "start_date": "2026-12-01",
+})
+
+
+class TestIntakeStartDate:
+    def test_accepts_optional_start_date(self):
+        state = {"user_input": {"raw": "Jaipur for 3 days from 2026-12-01"}}
+        with _mock_ask(WITH_DATE_JSON):
+            result = intake(state)
+
+        assert result["request"]["start_date"] == "2026-12-01"
+
+    def test_start_date_defaults_to_none_when_absent(self):
+        state = {"user_input": {"raw": "Jaipur for 3 days"}}
+        with _mock_ask(VALID_JSON):
+            result = intake(state)
+
+        assert result["request"]["start_date"] is None
+
+    def test_prompt_asks_for_an_optional_start_date(self):
+        with patch("backend.app.graph.nodes.ask", return_value=VALID_JSON) as mocked:
+            intake({"user_input": {}})
+
+        prompt = mocked.call_args.args[0]
+        assert "start_date" in prompt
+        assert "optional" in prompt
+
+    def test_rejects_invalid_start_date(self):
+        payload = json.dumps({
+            "destination": "Goa",
+            "days": 2,
+            "budget": 5000,
+            "interests": ["beach"],
+            "style": "relaxed",
+            "start_date": "next week",
+        })
+        with _mock_ask(payload):
+            result = intake({"user_input": {"raw": "Goa next week"}})
+
+        assert "feedback" in result
+        assert "request" not in result

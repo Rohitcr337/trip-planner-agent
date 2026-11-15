@@ -11,10 +11,12 @@ import time
 
 from pydantic import ValidationError
 
+from backend.app.costs import load_costs
 from backend.app.graph.state import TripState
 from backend.app.llm import ask
 from backend.app.retrieve import retrieve
 from backend.app.schemas import TripRequest
+from backend.app.tools import get_weather
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +78,9 @@ def intake(state: TripState) -> TripState:
         "  days         — integer 1–7\n"
         "  budget       — positive number (INR)\n"
         "  interests    — non-empty list of strings\n"
-        "  style        — one of: relaxed, packed\n\n"
+        "  style        — one of: relaxed, packed\n"
+        "  start_date   — optional ISO date (YYYY-MM-DD) if the user gave one; "
+        "otherwise null\n\n"
         f"User input:\n{json.dumps(user_input, ensure_ascii=False)}"
     )
 
@@ -113,4 +117,50 @@ def retrieve_node(state: TripState) -> TripState:
     result = dict(state)
     result["passages"] = passages
     _log("retrieve", query[:80], f"{len(passages)} passages", time.perf_counter() - t0)
+    return result
+
+
+def fetch_node(state: TripState) -> TripState:
+    """Fetch live weather (when a start date exists) and city cost estimates."""
+    t0 = time.perf_counter()
+    request = state.get("request")
+    if not request:
+        _log("fetch", "no request", "skipped", time.perf_counter() - t0)
+        return state
+
+    city = request["destination"]
+    days = request["days"]
+    start_date = request.get("start_date")
+
+    if start_date:
+        try:
+            weather = get_weather(city, start_date, days)
+        except Exception as exc:  # the tool should not raise; never break the graph
+            logger.exception("Weather tool raised unexpectedly")
+            weather = {
+                "available": False,
+                "reason": f"Weather lookup failed: {exc}",
+                "days": [],
+            }
+    else:
+        weather = {
+            "available": False,
+            "reason": "No start date provided; weather not fetched.",
+            "days": [],
+        }
+
+    try:
+        city_costs = load_costs(city)
+    except Exception as exc:  # cost data must never break the graph
+        logger.exception("Cost lookup raised unexpectedly")
+        city_costs = {"available": False, "reason": str(exc), "complete": False}
+
+    result = dict(state)
+    result["live_data"] = {"weather": weather, "costs": city_costs, "city": city}
+    _log(
+        "fetch",
+        f"{city} start={start_date}",
+        f"weather={weather['available']} costs_complete={city_costs.get('complete')}",
+        time.perf_counter() - t0,
+    )
     return result
