@@ -23,7 +23,7 @@ def ingest_guides(
     guide_paths = sorted(Path(guides_dir).glob("*.md"))
     chunks = [chunk for path in guide_paths for chunk in chunk_guide(path)]
     texts = [chunk.text for chunk in chunks]
-    metadata = [chunk.metadata for chunk in chunks]
+    metadata = [{**chunk.metadata, "text": chunk.text} for chunk in chunks]
 
     target = Path(index_dir)
     if target.exists():
