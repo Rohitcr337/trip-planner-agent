@@ -1,11 +1,9 @@
-import sqlite3
+import json
 
+import numpy as np
+
+from backend.app.vector_store import Embedder, NumpyStore, TfidfEmbedder, VectorStore
 from ingest import ingest_guides
-
-
-class FakeEmbeddingFunction:
-    def embed(self, texts):
-        return [[float(index), 1.0] for index, _ in enumerate(texts)]
 
 
 def _write_guide(directory, city, body):
@@ -23,24 +21,45 @@ source_url: https://example.test/{city.lower()}
 """,
         encoding="utf-8",
     )
-    return path
 
 
-def test_ingest_uses_injected_embeddings_and_is_idempotent(tmp_path, capsys):
+def test_interfaces_and_numpy_store_round_trip(tmp_path):
+    assert issubclass(TfidfEmbedder, Embedder)
+    assert issubclass(NumpyStore, VectorStore)
+    embedder = TfidfEmbedder().fit(["old square museum", "river market"])
+    vectors = embedder.transform(["old square"])
+    store = NumpyStore()
+    store.add(
+        vectors=np.vstack([vectors, embedder.transform(["river market"])]),
+        metadata=[
+            {"city": "Alpha", "text": "old square museum"},
+            {"city": "Beta", "text": "river market"},
+        ],
+    )
+    store.save(tmp_path)
+
+    loaded = NumpyStore.load(tmp_path)
+    results = loaded.query(vectors[0], k=2, city="Alpha")
+
+    assert results[0]["text"] == "old square museum"
+    assert loaded.metadata == store.metadata
+
+
+def test_ingest_rebuilds_index_and_saves_vectorizer(tmp_path, capsys):
     guides_dir = tmp_path / "guides"
     guides_dir.mkdir()
     _write_guide(guides_dir, "Alpha", "Visit the old square. Walk beside the river.")
-    _write_guide(guides_dir, "Beta", "See the museum. Eat at the small market.")
-    database = tmp_path / "chroma" / "guides.sqlite3"
+    _write_guide(guides_dir, "Beta", "See the city museum. Eat at the small market.")
+    index_dir = tmp_path / "index"
+    index_dir.mkdir()
+    (index_dir / "stale.txt").write_text("remove me", encoding="utf-8")
 
-    first_counts = ingest_guides(guides_dir, database, FakeEmbeddingFunction())
-    second_counts = ingest_guides(guides_dir, database, FakeEmbeddingFunction())
+    counts = ingest_guides(guides_dir, index_dir)
 
-    assert first_counts == {"Alpha": 1, "Beta": 1}
-    assert second_counts == first_counts
-    output = capsys.readouterr().out
-    assert "Stored 1 chunks for Alpha" in output
-    assert "Stored 1 chunks for Beta" in output
-    with sqlite3.connect(database) as connection:
-        assert connection.execute("SELECT COUNT(*) FROM guide_chunks").fetchone()[0] == 2
-        assert connection.execute("SELECT COUNT(DISTINCT id) FROM guide_chunks").fetchone()[0] == 2
+    assert counts == {"Alpha": 1, "Beta": 1}
+    assert (index_dir / "vectors.npz").exists()
+    assert (index_dir / "metadata.json").exists()
+    assert (index_dir / "vectorizer.joblib").exists()
+    assert not (index_dir / "stale.txt").exists()
+    assert json.loads((index_dir / "metadata.json").read_text())
+    assert "Stored 1 chunks for Alpha" in capsys.readouterr().out

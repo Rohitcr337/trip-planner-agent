@@ -1,6 +1,7 @@
 .env
 cache/
 chroma/
+index/
 __pycache__/
 .venv/
 *.pyc
@@ -15,3 +16,4 @@ LEARNING.md
 BUILD_BRIEF.md
 TODO.md
 data/guides/
+code_bundle.txt
