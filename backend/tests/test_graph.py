@@ -44,6 +44,8 @@ def _initial_state(**kwargs) -> TripState:
         "draft": None,
         "feedback": [],
         "revisions": 0,
+        "checks": [],
+        "unresolved": [],
     }
     base.update(kwargs)
     return base

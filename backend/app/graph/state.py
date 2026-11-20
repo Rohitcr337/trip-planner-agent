@@ -30,3 +30,9 @@ class TripState(TypedDict):
 
     # Number of revision cycles completed (capped at 3 by the graph).
     revisions: int
+
+    # Results from budget, logistics, and source checks for the current draft.
+    checks: list[dict]
+
+    # Problems that remain after the revision limit is reached.
+    unresolved: list[str]

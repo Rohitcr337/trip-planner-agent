@@ -29,6 +29,8 @@ class TestTripState:
         assert "draft" in hints
         assert "feedback" in hints
         assert "revisions" in hints
+        assert "checks" in hints
+        assert "unresolved" in hints
 
     def test_can_create_valid_state(self):
         state: TripState = {
@@ -39,8 +41,12 @@ class TestTripState:
             "draft": None,
             "feedback": [],
             "revisions": 0,
+            "checks": [],
+            "unresolved": [],
         }
         assert state["revisions"] == 0
+        assert state["checks"] == []
+        assert state["unresolved"] == []
         assert state["request"] is None
         assert state["passages"] == []
 

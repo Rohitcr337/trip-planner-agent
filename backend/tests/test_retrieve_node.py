@@ -12,6 +12,8 @@ def _state(request):
         "draft": None,
         "feedback": [],
         "revisions": 0,
+        "checks": [],
+        "unresolved": [],
     }
 
 

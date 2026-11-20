@@ -59,6 +59,8 @@ def plan_intake(body: IntakeRequest):
         "draft": None,
         "feedback": [],
         "revisions": 0,
+        "checks": [],
+        "unresolved": [],
     }
 
     result = intake_graph.invoke(initial_state)

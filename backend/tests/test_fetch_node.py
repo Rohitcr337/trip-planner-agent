@@ -61,6 +61,8 @@ def _state(request: dict | None) -> TripState:
         "draft": None,
         "feedback": [],
         "revisions": 0,
+        "checks": [],
+        "unresolved": [],
     }
 
 

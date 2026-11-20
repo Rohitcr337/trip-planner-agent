@@ -56,10 +56,12 @@ def check_budget(draft: dict, request: dict, costs: dict) -> CheckResult:
 def check_logistics(draft: dict, request: dict, live_data: dict) -> CheckResult:
     style = request.get("style", "relaxed")
     flags: list[str] = []
+    notes: list[str] = []
     weather = live_data.get("weather") or {}
     weather_available = bool(weather.get("available"))
     weather_days = weather.get("days") or []
     weather_by_date = {day.get("date"): day for day in weather_days if day.get("date")}
+    weather_has_dates = bool(weather_by_date)
     any_measured = False
     city = request.get("destination", draft.get("city", ""))
     for day_index, day in enumerate(_days(draft), 1):
@@ -94,19 +96,28 @@ def check_logistics(draft: dict, request: dict, live_data: dict) -> CheckResult:
         active_limit = MAX_ACTIVE_MINUTES.get(style, MAX_ACTIVE_MINUTES["relaxed"])
         if active > active_limit:
             flags.append(f"Day {number} active time is {active:.0f} minutes; maximum for {style} style is {active_limit}.")
-        forecast = weather_by_date.get(day.get("date")) if day.get("date") else None
-        if forecast is None and day_index <= len(weather_days):
+        if day.get("date") and weather_has_dates:
+            forecast = weather_by_date.get(day.get("date"))
+        elif day_index <= len(weather_days):
             forecast = weather_days[day_index - 1]
+        else:
+            forecast = None
         rainy = bool(forecast and forecast.get("rainy"))
         if weather_available and rainy:
             for stop in stops:
                 if stop.get("outdoor") is True:
                     flags.append(f"Day {number}, {stop.get('name', 'unnamed stop')} is mostly outdoors on a rainy day.")
     if not weather_available:
-        flags.append("rain not checked: weather is unavailable.")
+        notes.append("rain not checked: weather is unavailable.")
     if not any_measured:
-        flags.append("travel times not checked: no leg could be measured.")
-    return CheckResult(not flags, " ".join(flags) if flags else "All stop counts, travel times, active times, and available weather checks passed.")
+        notes.append("travel times not checked: no leg could be measured.")
+    if flags:
+        reason = " ".join(flags + notes)
+    else:
+        reason = "All stop counts, travel times, active times, and available weather checks passed."
+        if notes:
+            reason += " " + " ".join(notes)
+    return CheckResult(not flags, reason)
 
 
 def check_sources(draft: dict) -> CheckResult:

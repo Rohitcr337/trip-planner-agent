@@ -35,6 +35,8 @@ def _state(**overrides):
         "draft": None,
         "feedback": [],
         "revisions": 0,
+        "checks": [],
+        "unresolved": [],
     }
     state.update(overrides)
     return state
