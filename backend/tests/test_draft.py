@@ -56,6 +56,7 @@ def _draft_json(passage_ids=None):
                             "duration_minutes": 120,
                             "est_cost_inr": 500,
                             "notes": "Check current details.",
+                            "outdoor": True,
                             "passage_ids": passage_ids if passage_ids is not None else [1],
                         }
                     ],
@@ -82,6 +83,7 @@ def test_draft_node_validates_and_fills_sources():
         }
     ]
     assert stop["unverified"] is False
+    assert stop["outdoor"] is True
 
 
 def test_invalid_passage_ids_and_empty_citations_are_unverified():
@@ -135,6 +137,7 @@ def test_prompt_contains_request_passages_costs_and_feedback():
     assert "1. Amber Fort is a historic fort." in prompt
     assert "reduce the cost" in prompt
     assert "Previous draft" in prompt
+    assert "true if the stop is mostly outdoors" in prompt
 
 
 def test_prompt_reports_unavailable_weather_without_inventing_it():

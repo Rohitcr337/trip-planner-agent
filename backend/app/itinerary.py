@@ -24,6 +24,7 @@ class Stop(BaseModel):
     duration_minutes: int = Field(gt=0)
     est_cost_inr: float = Field(ge=0)
     notes: str
+    outdoor: bool | None = None
     passage_ids: list[int]
     sources: list[Source] = Field(default_factory=list)
     unverified: bool = False
@@ -89,6 +90,7 @@ Rules:
 - Output JSON only and nothing else.
 - Plan exactly the requested number of days.
 - Every stop must list in passage_ids the numbers of the passages that support it, or [] if none do.
+- For each stop, set outdoor to true if the stop is mostly outdoors, otherwise false; use null if unknown.
 - Do not invent facts, prices, or opening hours; put uncertainty in notes.
 - Keep each day's stops in a sensible geographic order using area for the neighbourhood or district.
 - Fit the budget using the cost estimates and say so in assumptions.
