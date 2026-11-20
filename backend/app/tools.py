@@ -47,7 +47,13 @@ OSRM_ENV_VAR = "USE_OSRM"
 OSRM_CACHE_TTL_S = 24 * 60 * 60
 OSRM_MIN_INTERVAL_S = 1.0
 
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+GEOCODING_ENV_VAR = "USE_GEOCODING"
+GEOCODING_MIN_INTERVAL_S = 1.0
+CITY_MAX_RADIUS_KM = 40.0
+
 _last_osrm_call_s = 0.0
+_last_geocoding_call_s = 0.0
 
 
 # ── Disk cache ────────────────────────────────────────────────────────────────
@@ -225,6 +231,50 @@ def _wait_for_osrm_slot() -> None:
     if wait_s > 0:
         time.sleep(wait_s)
     _last_osrm_call_s = time.monotonic()
+
+
+def geocode(place: str, city: str) -> tuple[float, float] | None:
+    """Find a place within its configured city, only when explicitly enabled."""
+    global _last_geocoding_call_s
+    if os.getenv(GEOCODING_ENV_VAR) != "1":
+        return None
+    centre = CITY_COORDS.get(city)
+    if centre is None or not place:
+        return None
+    payload = {"place": str(place).strip(), "city": city}
+    cached = _cache_read("geocode", payload, float("inf"))
+    if cached is not None:
+        try:
+            lat, lon = _valid_point(cached)
+            return (lat, lon) if _haversine_km(centre, (lat, lon)) <= CITY_MAX_RADIUS_KM else None
+        except (TypeError, ValueError, IndexError):
+            return None
+    lat, lon = centre
+    lat_delta = CITY_MAX_RADIUS_KM / 111.0
+    lon_delta = CITY_MAX_RADIUS_KM / (111.0 * max(math.cos(math.radians(lat)), 0.01))
+    params = {
+        "q": f"{payload['place']}, {city}", "format": "jsonv2", "limit": 1,
+        "viewbox": f"{lon-lon_delta},{lat+lat_delta},{lon+lon_delta},{lat-lat_delta}",
+        "bounded": 1,
+    }
+    try:
+        wait_s = _last_geocoding_call_s + GEOCODING_MIN_INTERVAL_S - time.monotonic()
+        if wait_s > 0:
+            time.sleep(wait_s)
+        _last_geocoding_call_s = time.monotonic()
+        response = httpx.get(NOMINATIM_URL, params=params, timeout=HTTP_TIMEOUT_S,
+                             headers={"User-Agent": USER_AGENT})
+        response.raise_for_status()
+        results = response.json()
+        if not isinstance(results, list) or not results:
+            _cache_write("geocode", payload, [])
+            return None
+        point = _valid_point((results[0]["lat"], results[0]["lon"]))
+        _cache_write("geocode", payload, point)
+        return point if _haversine_km(centre, point) <= CITY_MAX_RADIUS_KM else None
+    except Exception as exc:
+        logger.warning("Geocoding lookup failed for %r in %s: %s", place, city, exc)
+        return None
 
 
 def _parse_osrm(data: Any) -> dict[str, Any]:
