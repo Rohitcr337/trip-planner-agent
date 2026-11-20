@@ -11,6 +11,7 @@ import time
 
 from pydantic import ValidationError
 
+from backend.app.checks import run_checks
 from backend.app.costs import load_costs
 from backend.app.graph.state import TripState
 from backend.app.itinerary import Itinerary, Source, build_draft_prompt
@@ -176,28 +177,10 @@ def draft_node(state: TripState) -> TripState:
         return state
 
     try:
-        raw = ask(build_draft_prompt(state))
-        itinerary = Itinerary.model_validate(_extract_json(raw))
-        passages = state.get("passages") or []
-        for stop in (stop for day in itinerary.days for stop in day.stops):
-            valid_ids = sorted(
-                {passage_id for passage_id in stop.passage_ids
-                 if 1 <= passage_id <= len(passages)}
-            )
-            stop.passage_ids = valid_ids
-            stop.sources = [
-                Source(
-                    source_name=passages[passage_id - 1]["source_name"],
-                    source_url=passages[passage_id - 1]["source_url"],
-                    section=passages[passage_id - 1]["section"],
-                )
-                for passage_id in valid_ids
-            ]
-            stop.unverified = not stop.sources
-
+        validated = _create_draft(state)
         result = dict(state)
-        result["draft"] = itinerary.model_dump(mode="json")
-        _log("draft", request["destination"], f"{len(itinerary.days)} days", time.perf_counter() - t0)
+        result["draft"] = validated
+        _log("draft", request["destination"], f"{len(validated['days'])} days", time.perf_counter() - t0)
         return result
     except (ValidationError, ValueError, KeyError, json.JSONDecodeError) as exc:
         result = dict(state)
@@ -205,3 +188,75 @@ def draft_node(state: TripState) -> TripState:
         result["feedback"] = [*state.get("feedback", []), f"Draft could not be created: {exc}"]
         _log("draft", request["destination"], "feedback", time.perf_counter() - t0)
         return result
+
+
+def _parse_and_validate_draft(raw: str, state: TripState) -> dict:
+    """Parse itinerary JSON, validate its schema, and attach retrieved sources."""
+    itinerary = Itinerary.model_validate(_extract_json(raw))
+    passages = state.get("passages") or []
+    for stop in (stop for day in itinerary.days for stop in day.stops):
+        valid_ids = sorted(
+            {passage_id for passage_id in stop.passage_ids
+             if 1 <= passage_id <= len(passages)}
+        )
+        stop.passage_ids = valid_ids
+        stop.sources = [
+            Source(
+                source_name=passages[passage_id - 1]["source_name"],
+                source_url=passages[passage_id - 1]["source_url"],
+                section=passages[passage_id - 1]["section"],
+            )
+            for passage_id in valid_ids
+        ]
+        stop.unverified = not stop.sources
+    return itinerary.model_dump(mode="json")
+
+
+def _create_draft(
+    state: TripState,
+    feedback: list[str] | None = None,
+    previous_draft: dict | None = None,
+) -> dict:
+    """Ask for an itinerary and return its validated, source-enriched form."""
+    raw = ask(build_draft_prompt(state, feedback, previous_draft))
+    return _parse_and_validate_draft(raw, state)
+
+
+def check_node(state: TripState) -> TripState:
+    """Run all deterministic checks and collect actionable revision feedback."""
+    t0 = time.perf_counter()
+    checks = run_checks(state)
+    feedback = [
+        item["reason"] for item in checks
+        if not item["passed"] and not item["reason"].lower().startswith("skipped:")
+    ]
+    result = dict(state)
+    result["checks"] = checks
+    result["feedback"] = feedback
+    _log("check", "draft", f"{len(feedback)} failing checks", time.perf_counter() - t0)
+    return result
+
+
+def revise_node(state: TripState) -> TripState:
+    """Ask for a revision and retain the previous draft if parsing fails."""
+    t0 = time.perf_counter()
+    previous = state.get("draft")
+    result = dict(state)
+    try:
+        result["draft"] = _create_draft(state, state.get("feedback", []), previous)
+        _log("revise", str(state.get("revisions", 0)), "draft updated", time.perf_counter() - t0)
+    except (ValidationError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        result["draft"] = previous
+        result["feedback"] = [*state.get("feedback", []), f"Revision could not be parsed; previous draft retained: {exc}"]
+        _log("revise", str(state.get("revisions", 0)), "previous draft retained", time.perf_counter() - t0)
+    result["revisions"] = int(state.get("revisions", 0)) + 1
+    return result
+
+
+def unresolved_node(state: TripState) -> TripState:
+    """Record the check reasons that remain after the revision limit."""
+    t0 = time.perf_counter()
+    result = dict(state)
+    result["unresolved"] = list(state.get("feedback", []))
+    _log("unresolved", "revision limit", f"{len(result['unresolved'])} issues", time.perf_counter() - t0)
+    return result
