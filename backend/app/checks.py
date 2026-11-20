@@ -27,8 +27,15 @@ def _days(draft: dict) -> list[dict]:
 
 def check_budget(draft: dict, request: dict, costs: dict) -> CheckResult:
     days = int(request.get("days", len(_days(draft))))
-    stops = [stop for day in _days(draft) for stop in day.get("stops", [])]
-    missing = [stop.get("name", "unnamed stop") for stop in stops if stop.get("est_cost_inr") is None]
+    stops = [
+        (day.get("day", day_index), stop)
+        for day_index, day in enumerate(_days(draft), 1)
+        for stop in day.get("stops", [])
+    ]
+    missing = [
+        f"Day {day_number}, {stop.get('name', 'unnamed stop')}"
+        for day_number, stop in stops if stop.get("est_cost_inr") is None
+    ]
     required = ("local_transport_per_day", "meal_budget", "stay_budget_per_night")
     if costs.get("complete") is False or any(costs.get(key) is None for key in required):
         reason = "skipped: cost data is incomplete; budget was not checked."
@@ -38,7 +45,7 @@ def check_budget(draft: dict, request: dict, costs: dict) -> CheckResult:
         reason = "skipped: cost data is incomplete; budget was not checked."
         logger.warning(reason)
         return CheckResult(True, reason)
-    stop_total = sum(float(stop.get("est_cost_inr") or 0) for stop in stops)
+    stop_total = sum(float(stop.get("est_cost_inr") or 0) for _, stop in stops)
     transport_meals = days * (float(costs["local_transport_per_day"]) + MEALS_PER_DAY * float(costs["meal_budget"]))
     nights = max(days - 1, 0)
     stay_total = nights * float(costs["stay_budget_per_night"])
@@ -47,8 +54,11 @@ def check_budget(draft: dict, request: dict, costs: dict) -> CheckResult:
     if estimate <= budget + BUDGET_TOLERANCE:
         note = f" Missing stop costs counted as 0: {', '.join(missing)}." if missing else ""
         return CheckResult(True, f"Estimated total INR {estimate:.2f} is within per-person trip budget INR {budget:.2f}.{note}")
-    expensive = sorted(stops, key=lambda s: float(s.get("est_cost_inr") or 0), reverse=True)[:3]
-    expensive_text = ", ".join(f"{s.get('name', 'unnamed stop')} INR {float(s.get('est_cost_inr') or 0):.2f}" for s in expensive) or "none"
+    expensive = sorted(stops, key=lambda item: float(item[1].get("est_cost_inr") or 0), reverse=True)[:3]
+    expensive_text = ", ".join(
+        f"Day {day_number}, {stop.get('name', 'unnamed stop')} INR {float(stop.get('est_cost_inr') or 0):.2f}"
+        for day_number, stop in expensive
+    ) or "none"
     missing_text = f" Missing stop costs counted as 0: {', '.join(missing)}." if missing else ""
     return CheckResult(False, f"Estimated total INR {estimate:.2f} exceeds per-person trip budget INR {budget:.2f} by INR {estimate-budget:.2f}; breakdown: stops INR {stop_total:.2f}, transport and meals INR {transport_meals:.2f}, stay INR {stay_total:.2f}; three most expensive stops: {expensive_text}.{missing_text}")
 

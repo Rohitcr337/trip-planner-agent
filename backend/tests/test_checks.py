@@ -37,7 +37,7 @@ def test_budget_overage_has_breakdown_and_expensive_stops():
     d = draft([{"name": "Palace", "est_cost_inr": 1000}, {"name": "Gallery", "est_cost_inr": 500}])
     result = check_budget(d, REQUEST, COSTS)
     assert not result.passed
-    for text in ("stops", "transport and meals", "stay", "Palace", "INR 1500", "INR 1300"):
+    for text in ("stops", "transport and meals", "stay", "Day 1", "Palace", "INR 1500", "INR 1300"):
         assert text in result.reason
 
 
