@@ -62,7 +62,7 @@ def test_offline_run_uses_retrieved_stops_and_makes_no_model_or_http_calls():
          patch("scripts.run_trip.real_ask", side_effect=AssertionError("unexpected model call")):
         result = run_trip(args, output=lines.append)
 
-    assert result["draft"]["days"][0]["stops"][0]["name"].startswith("Amber Fort:")
+    assert result["draft"]["days"][0]["stops"][0]["name"] == "Amber Fort"
     assert result["draft"]["days"][0]["stops"][0]["sources"][0]["source_name"] == "Jaipur Guide"
     assert result["revisions"] == 0
     assert all(item["passed"] for item in result["checks"])
@@ -83,5 +83,5 @@ def test_offline_fake_also_handles_revision_prompts():
          patch("scripts.run_trip.real_ask", side_effect=AssertionError("unexpected model call")):
         result = run_trip(args, output=lambda line: None)
     assert result["revisions"] == 3
-    assert result["draft"]["days"][0]["stops"][0]["name"].startswith("Amber Fort:")
+    assert result["draft"]["days"][0]["stops"][0]["name"] == "Amber Fort"
     assert result["unresolved"]

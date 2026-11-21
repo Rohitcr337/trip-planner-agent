@@ -18,16 +18,68 @@ FOOD_TERMS = (
 OUTDOOR_TERMS = ("beach", "fort", "garden", "hill", "waterfall", "park", "lake", "outdoor")
 
 
-def _name_from_passage(passage: dict[str, Any]) -> str:
-    section = str(passage.get("section") or "Guide passage").strip()
+_NAME_START_WORDS = {
+    "a", "an", "and", "as", "at", "but", "by", "cafes", "cafe", "for",
+    "famous", "food", "from", "here", "if", "in", "it", "local", "many",
+    "most", "of", "once", "one", "our", "people", "several", "some", "the",
+    "there", "they", "this", "visitors", "we", "you",
+}
+_MARKUP = re.compile(r"<[^>]*>|\*\*|__|'''|''|`|^\s*#{1,6}\s*")
+_BOLD_NAME = re.compile(r"\*\*(.+?)\*\*|__(.+?)__|'''(.+?)'''|''(.+?)''")
+_PROPER_NOUN = re.compile(
+    r"\b[A-Z][A-Za-z0-9’'-]*(?:\s+(?:[A-Z][A-Za-z0-9’'-]*|of|the|and|at|in|on|de|da)){0,4}"
+)
+
+
+def _clean_name_candidate(value: str) -> str:
+    value = _MARKUP.sub("", value)
+    value = re.sub(r"^\s*(?:(?:[-*+•]\s+)|(?:\d+[.)]\s*)|(?:\d+\s+))+", "", value)
+    value = re.sub(r"\s+", " ", value).strip(" \t\r\n:;,.—–-_'\"()[]{}")
+    return " ".join(value.split()[:6])
+
+
+def _usable_name(value: str, city: str) -> str | None:
+    candidate = _clean_name_candidate(value)
+    if not candidate or candidate.casefold() == city.casefold():
+        return None
+    words = candidate.split()
+    while len(words) > 1 and words[0].casefold() in _NAME_START_WORDS:
+        words.pop(0)
+    candidate = " ".join(words)
+    first = re.sub(r"[^A-Za-z]+$", "", words[0]).casefold()
+    if (not first or first in _NAME_START_WORDS or first[0].isdigit()
+            or not words[0][0].isupper()):
+        return None
+    return candidate
+
+
+def _name_from_passage(passage: dict[str, Any], city: str) -> str:
+    text = str(passage.get("text") or "")
+    for match in _BOLD_NAME.finditer(text):
+        value = next(group for group in match.groups() if group is not None)
+        candidate = _usable_name(value, city)
+        if candidate:
+            return candidate
+
+    for match in _PROPER_NOUN.finditer(text):
+        candidate = _usable_name(match.group(0), city)
+        if candidate:
+            return candidate
+
+    leading_item = re.split(r"\s+[—–-]\s+|\s*:\s*", text, maxsplit=1)[0]
+    candidate = _usable_name(leading_item, city)
+    if candidate:
+        return candidate
+
+    section = str(passage.get("section") or "Guide passage")
     heading = section.split(" > ")[-1].strip() or "Guide passage"
-    text_words = re.findall(r"[\w’'-]+", str(passage.get("text") or ""))[:5]
-    text_start = " ".join(text_words)
-    name = f"{heading}: {text_start}" if text_start else heading
-    name = re.sub(r"\s+", " ", name).strip(" :;,.—-")
-    if len(name) > 76:
-        name = name[:73].rsplit(" ", 1)[0] + "..."
-    return name or "Guide passage"
+    fallback_words = _clean_name_candidate(f"{heading}, {city}").split()
+    while len(fallback_words) > 1 and fallback_words[0].casefold() in _NAME_START_WORDS:
+        fallback_words.pop(0)
+    if fallback_words:
+        fallback_words[0] = fallback_words[0][:1].upper() + fallback_words[0][1:]
+    fallback = " ".join(fallback_words[:6])
+    return fallback or _clean_name_candidate(f"Guide passage, {city}")
 
 
 def _area_from_passage(text: str, city: str) -> str:
@@ -92,7 +144,7 @@ class FakeModel:
                 elif any(term in description for term in ("indoor", "museum", "gallery", "interior")):
                     outdoor = False
                 stops.append({
-                    "name": _name_from_passage(passage),
+                    "name": _name_from_passage(passage, city),
                     "area": _area_from_passage(passage_text, city),
                     "time_slot": time_slot,
                     "duration_minutes": 60 if is_food else 90,

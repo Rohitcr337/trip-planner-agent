@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from backend.app.fake_model import create_fake_model
+from backend.app.fake_model import _name_from_passage, create_fake_model
 
 
 PASSAGES = [
@@ -38,7 +38,7 @@ def test_fake_plan_uses_passages_and_city_costs_for_each_style(style, expected_c
             passage = PASSAGES[stop["passage_ids"][0] - 1]
             assert stop["passage_text"] == passage["text"]
             assert stop["name"] != "Jaipur"
-            assert stop["name"].startswith(passage["section"])
+            assert stop["name"] in passage["text"] or stop["name"].startswith(passage["section"])
             if passage is PASSAGES[0]:
                 assert stop["area"] == "Amer"
             if passage is PASSAGES[1]:
@@ -49,6 +49,32 @@ def test_fake_plan_uses_passages_and_city_costs_for_each_style(style, expected_c
             ) else COSTS["typical_entry_fee_low"]
             assert stop["est_cost_inr"] == expected_cost
             assert "Offline sample" in stop["notes"]
+
+
+@pytest.mark.parametrize("text", [
+    "1 Beaches Goa is famous for its coastline.",
+    "If in a small group, visitors can try this.",
+    "This beach is full of people in season.",
+    "The museum has several galleries.",
+    "It is a popular place. You can visit there.",
+])
+def test_sample_names_are_short_and_never_start_with_list_numbers_or_filler(text):
+    name = _name_from_passage({"text": text, "section": "Goa guide"}, "Goa")
+    first = name.split()[0]
+    assert len(name.split()) <= 6
+    assert not first[0].isdigit()
+    assert first.casefold() not in {
+        "if", "this", "the", "it", "you", "there", "a", "an", "in",
+    }
+    assert name.casefold() != "goa"
+
+
+def test_sample_name_prefers_bolded_place_from_passage():
+    name = _name_from_passage(
+        {"text": "1. '''Amber Fort''' — a historic site in Amer.", "section": "Jaipur guide"},
+        "Jaipur",
+    )
+    assert name == "Amber Fort"
 
 
 def test_fake_model_handles_intake_prompt():
