@@ -23,6 +23,7 @@ import httpx
 from google import genai
 from google.genai import errors, types
 from dotenv import load_dotenv
+from backend.app.quota import ModelCallLimitReached, record_model_call
 
 load_dotenv()
 
@@ -180,10 +181,13 @@ def ask(prompt: str, model: str | None = None) -> str:
     for attempt in range(1, _MAX_RETRIES + 2):   # attempts: 1, 2, 3
         try:
             t0 = time.perf_counter()
+            record_model_call()
             text = _call_api(prompt, chosen_model, api_key)
             elapsed = time.perf_counter() - t0
             break
         except Exception as exc:
+            if isinstance(exc, ModelCallLimitReached):
+                raise
             # 1. 4xx Client errors: do NOT retry, raise immediately
             if _is_client_error(exc):
                 code = _get_status_code(exc) or "4xx"

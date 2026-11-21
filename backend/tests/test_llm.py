@@ -20,6 +20,13 @@ import pytest
 from google.genai import errors
 
 
+@pytest.fixture(autouse=True)
+def isolate_model_quota(tmp_path, monkeypatch):
+    from backend.app import quota
+
+    monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------

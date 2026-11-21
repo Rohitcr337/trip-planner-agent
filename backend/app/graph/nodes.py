@@ -72,6 +72,17 @@ def intake(state: TripState) -> TripState:
     node = "intake"
     user_input = state.get("user_input", {})
 
+    if state.get("request") is not None:
+        try:
+            req = TripRequest.model_validate(state["request"])
+            result = req.model_dump()
+            _log(node, "structured request", str(result)[:80], time.perf_counter() - t0)
+            return {"request": result}
+        except ValidationError as exc:
+            reason = str(exc)
+            _log(node, "structured request", f"feedback: {reason[:80]}", time.perf_counter() - t0)
+            return {"feedback": [reason]}
+
     prompt = (
         "You are a trip-planning assistant. "
         "Parse the user's trip request and return ONLY a JSON object "

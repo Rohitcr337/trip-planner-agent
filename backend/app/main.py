@@ -9,14 +9,21 @@ Endpoints:
                         422 Unprocessable Entity with a reason on failure.
 """
 import logging
+import json
+import time
+from collections.abc import Iterator
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from starlette.responses import StreamingResponse
 
-from backend.app.graph.build import intake_graph
+from backend.app.graph.build import intake_graph, planning_graph
 from backend.app.graph.state import TripState
+from backend.app.quota import ModelCallLimitReached, limit_reached
+from backend.app.schemas import TripRequest
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Trip Planner Agent")
 
@@ -74,3 +81,75 @@ def plan_intake(body: IntakeRequest):
         raise HTTPException(status_code=422, detail="Failed to parse trip request.")
 
     return IntakeResponse(request=result["request"])
+
+
+_STEP_MESSAGES = {
+    "intake": "Trip details validated.",
+    "retrieve": "Guide passages retrieved.",
+    "fetch": "Weather and cost estimates loaded.",
+    "draft_itinerary": "Itinerary draft created.",
+    "check": "Draft checks completed.",
+    "revise": "Draft revision completed.",
+}
+
+
+def _event(event_name: str, payload: dict) -> str:
+    return f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _planning_event_stream(request: TripRequest) -> Iterator[str]:
+    initial_state: TripState = {
+        "user_input": request.model_dump(),
+        "request": request.model_dump(),
+        "passages": [],
+        "live_data": {},
+        "draft": None,
+        "feedback": [],
+        "revisions": 0,
+        "checks": [],
+        "unresolved": [],
+    }
+    current = dict(initial_state)
+    previous = time.perf_counter()
+    try:
+        for update in planning_graph.stream(initial_state, stream_mode="updates"):
+            for node_name, node_update in update.items():
+                current.update(node_update)
+                now = time.perf_counter()
+                step_name = "draft" if node_name == "draft_itinerary" else node_name
+                message = _STEP_MESSAGES.get(node_name)
+                if message:
+                    yield _event("step", {
+                        "name": step_name,
+                        "message": message,
+                        "elapsed_seconds": round(now - previous, 3),
+                    })
+                previous = now
+        yield _event("result", {
+            "draft": current.get("draft"),
+            "checks": current.get("checks", []),
+            "revisions": current.get("revisions", 0),
+            "unresolved": current.get("unresolved", []),
+            "costs_are_estimates": True,
+            "demo": False,
+        })
+    except ModelCallLimitReached:
+        yield _event("error", {"message": "Daily model call limit reached. Try again tomorrow."})
+    except Exception:
+        logger.exception("Planning stream failed")
+        yield _event("error", {"message": "Planning failed. Please retry."})
+
+
+@app.post("/plan")
+def plan(request: TripRequest):
+    """Stream planning progress and the final checked itinerary as SSE."""
+    if limit_reached():
+        raise HTTPException(
+            status_code=429,
+            detail="Daily model call limit reached. Try again tomorrow.",
+        )
+    return StreamingResponse(
+        _planning_event_stream(request),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
