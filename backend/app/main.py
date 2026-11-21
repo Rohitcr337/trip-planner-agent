@@ -17,6 +17,7 @@ from collections.abc import Iterator
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.graph.build import intake_graph, planning_graph
 from backend.app.graph.state import TripState
@@ -28,6 +29,26 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Trip Planner Agent")
+
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+)
+
+
+def get_cors_origins() -> list[str]:
+    configured = os.getenv("CORS_ORIGINS")
+    if configured is None:
+        return list(DEFAULT_CORS_ORIGINS)
+    return [origin.strip() for origin in configured.split(",") if origin.strip()]
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ── Request / Response models ─────────────────────────────────────────────────
@@ -48,6 +69,20 @@ class IntakeResponse(BaseModel):
 def health():
     """Liveness check."""
     return {"status": "ok"}
+
+
+@app.get("/options")
+def options():
+    """Return the choices used to build a trip request form."""
+    return {
+        "cities": ["Jaipur", "Chennai", "Goa"],
+        "styles": ["relaxed", "packed"],
+        "day_range": {"min": 1, "max": 7},
+        "interest_suggestions": [
+            "history", "food", "culture", "beaches", "nature", "shopping",
+            "nightlife", "temples", "architecture", "markets", "relaxation",
+        ],
+    }
 
 
 @app.post("/plan/intake", response_model=IntakeResponse, status_code=200)
