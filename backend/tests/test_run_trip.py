@@ -1,6 +1,12 @@
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import patch
 
 from scripts.run_trip import build_parser, run_trip
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+RUN_SCRIPT = PROJECT_ROOT / "scripts" / "run_trip.py"
 
 
 PASSAGE = {
@@ -28,6 +34,18 @@ def test_arguments_default_to_offline_and_parse_trip_options():
     assert args.interests == "history, food"
     assert args.style == "packed"
     assert args.start_date == "2026-12-01"
+
+
+def test_script_help_works_from_another_working_directory(tmp_path):
+    result = subprocess.run(
+        [sys.executable, str(RUN_SCRIPT), "--help"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0
+    assert "usage:" in result.stdout.lower()
 
 
 def test_offline_run_uses_retrieved_stops_and_makes_no_model_or_http_calls():
