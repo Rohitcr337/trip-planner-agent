@@ -1,33 +1,47 @@
 """
-graph/build.py — assemble and compile the LangGraph workflow.
+graph/build.py — assemble and compile the LangGraph workflows.
 
-The graph grows with each phase:
-  Phase 1: intake only
-  Phase 2+: nodes added here in order.
-
-The compiled graph is exposed as `graph` for import by other modules.
+intake graph: used by /plan/intake. Runs intake, retrieve, and fetch.
+planning graph: full trip planning, compiled separately so /plan/intake
+does not run later steps.
 """
 from langgraph.graph import END, StateGraph
 
 from backend.app.graph.nodes import fetch_node, intake, retrieve_node
 from backend.app.graph.state import TripState
 
-# ── Build ─────────────────────────────────────────────────────────────────────
 
-def build_graph() -> StateGraph:
-    """Construct and compile the trip-planner workflow graph."""
+def _base_builder() -> StateGraph:
+    """Shared prefix: intake, then retrieve, then fetch."""
     builder = StateGraph(TripState)
-
     builder.add_node("intake", intake)
     builder.add_node("retrieve", retrieve_node)
     builder.add_node("fetch", fetch_node)
     builder.set_entry_point("intake")
     builder.add_edge("intake", "retrieve")
     builder.add_edge("retrieve", "fetch")
-    builder.add_edge("fetch", END)
+    return builder
 
+
+def build_intake_graph():
+    """Compile the graph used by /plan/intake. Stops after fetch and does not draft."""
+    builder = _base_builder()
+    builder.add_edge("fetch", END)
     return builder.compile()
 
 
-# Compiled graph — import this wherever you need to run the workflow.
-graph = build_graph()
+def build_planning_graph():
+    """Compile the planning graph. Callers that plan a full trip use this graph."""
+    builder = _base_builder()
+    builder.add_edge("fetch", END)
+    return builder.compile()
+
+
+def build_graph():
+    """Return the intake graph for existing callers and tests."""
+    return build_intake_graph()
+
+
+intake_graph = build_intake_graph()
+planning_graph = build_planning_graph()
+graph = intake_graph

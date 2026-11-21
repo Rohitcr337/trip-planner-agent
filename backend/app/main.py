@@ -3,8 +3,9 @@ main.py — FastAPI application entry point.
 
 Endpoints:
   GET  /health        — liveness check
-  POST /plan/intake   — parse and validate a trip request via the LangGraph workflow;
-                        returns the structured TripRequest on success or
+  POST /plan/intake   — parse and validate a trip request via the intake graph
+                        (intake, retrieve, fetch). Does not draft an itinerary.
+                        Returns the structured TripRequest on success or
                         422 Unprocessable Entity with a reason on failure.
 """
 import logging
@@ -12,7 +13,7 @@ import logging
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from backend.app.graph.build import graph
+from backend.app.graph.build import intake_graph
 from backend.app.graph.state import TripState
 
 logging.basicConfig(level=logging.INFO)
@@ -43,7 +44,9 @@ def health():
 @app.post("/plan/intake", response_model=IntakeResponse, status_code=200)
 def plan_intake(body: IntakeRequest):
     """
-    Run the intake workflow on the submitted user input using the compiled graph.
+    Run the intake graph on the submitted user input.
+
+    The intake graph stops after fetch, so this endpoint does not draft.
 
     Returns the validated TripRequest dict on success.
     Returns HTTP 422 with the validation reason(s) on failure.
@@ -58,7 +61,7 @@ def plan_intake(body: IntakeRequest):
         "revisions": 0,
     }
 
-    result = graph.invoke(initial_state)
+    result = intake_graph.invoke(initial_state)
 
     if result.get("feedback"):
         # Join multiple reasons into one message
