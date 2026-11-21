@@ -18,3 +18,5 @@ TODO.md
 data/guides/
 code_bundle.txt
 Python/
+frontend/node_modules/
+frontend/dist/
