@@ -14,6 +14,7 @@ def _state(request):
         "revisions": 0,
         "checks": [],
         "unresolved": [],
+        "fake_model": None,
     }
 
 

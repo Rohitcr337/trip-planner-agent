@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import time
 from datetime import date
@@ -16,6 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from backend.app.graph import nodes
 from backend.app.graph.build import planning_graph
 from backend.app.graph.state import TripState
+from backend.app.fake_model import create_fake_model
 from backend.app.llm import ask as real_ask
 
 
@@ -33,33 +33,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.set_defaults(offline=True)
     parser.add_argument("--no-weather", action="store_true", help="Skip the optional weather lookup")
     return parser
-
-
-def _fake_itinerary(city: str, days: int, passages: list[dict[str, Any]]) -> str:
-    day_items = []
-    for day_number in range(1, days + 1):
-        passage = passages[(day_number - 1) % len(passages)] if passages else None
-        stops = []
-        if passage:
-            section = str(passage.get("section") or "Guide stop").strip()
-            name = section.split(" > ")[-1].strip() or "Guide stop"
-            stops.append({
-                "name": name,
-                "area": city,
-                "time_slot": "morning",
-                "duration_minutes": 60,
-                "est_cost_inr": 0,
-                "notes": "Selected from a retrieved guide passage; check current details.",
-                "outdoor": None,
-                "passage_ids": [((day_number - 1) % len(passages)) + 1],
-            })
-        day_items.append({"day": day_number, "date": None, "stops": stops, "weather_note": None})
-    return json.dumps({
-        "city": city,
-        "days": day_items,
-        "total_est_cost_inr": 0,
-        "assumptions": ["Stop costs are estimates; the model total is not used by the budget check."],
-    })
 
 
 def _print_result(
@@ -117,31 +90,18 @@ def run_trip(
     if not request["interests"]:
         raise ValueError("--interests must contain at least one item")
 
-    retrieved: list[dict[str, Any]] = []
-    original_retrieve = nodes.retrieve
     original_weather = nodes.get_weather
     original_ask = nodes.ask
-    call_count = 0
-
-    def collect_passages(city: str, query: str, k: int = 4) -> list[dict[str, Any]]:
-        passages = original_retrieve(city, query, k)
-        retrieved[:] = passages
-        return passages
-
-    def offline_model(prompt: str) -> str:
-        if "Parse the user's trip request" in prompt:
-            return json.dumps(request)
-        return _fake_itinerary(args.city, args.days, retrieved)
+    real_model_calls = 0
+    fake_model = create_fake_model(request)
 
     def counted_model(prompt: str) -> str:
-        nonlocal call_count
-        if args.offline:
-            return offline_model(prompt)
-        call_count += 1
+        nonlocal real_model_calls
+        real_model_calls += 1
         return (model_call or real_ask)(prompt)
 
-    nodes.retrieve = collect_passages
-    nodes.ask = counted_model
+    if not args.offline:
+        nodes.ask = counted_model
     if args.no_weather:
         nodes.get_weather = lambda city, start_date, days: {
             "available": False, "reason": "Weather lookup disabled by --no-weather.", "days": []
@@ -160,14 +120,14 @@ def run_trip(
             "revisions": 0,
             "checks": [],
             "unresolved": [],
+            "fake_model": fake_model if args.offline else None,
         }
         result = planning_graph.invoke(initial_state)
     finally:
-        nodes.retrieve = original_retrieve
         nodes.get_weather = original_weather
         nodes.ask = original_ask
     elapsed = time.perf_counter() - started
-    _print_result(result, elapsed, call_count, output)
+    _print_result(result, elapsed, real_model_calls, output)
     return result
 
 

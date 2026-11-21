@@ -63,6 +63,7 @@ def _state(request: dict | None) -> TripState:
         "revisions": 0,
         "checks": [],
         "unresolved": [],
+        "fake_model": None,
     }
 
 

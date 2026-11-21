@@ -91,3 +91,35 @@ def test_plan_stream_hides_internal_errors(tmp_path, monkeypatch):
     events = _events(response.text)
     assert events[-1] == ("error", {"message": "Planning failed. Please retry."})
     assert "private transport details" not in response.text
+
+
+def test_demo_mode_uses_passage_grounded_plan_without_api_calls(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEMO_MODE", "1")
+    monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+    quota._quota_path().write_text(
+        json.dumps({"count": quota.MAX_MODEL_CALLS_PER_DAY}), encoding="utf-8"
+    )
+    passages = [
+        PASSAGE,
+        {"text": "Local food stalls serve traditional dishes at Baga Beach.",
+         "section": "Food and dining", "source_name": "Goa Guide",
+         "source_url": "https://example.test/food"},
+        {"text": "A quiet garden sits near the city museum.", "section": "City Garden",
+         "source_name": "Jaipur Guide", "source_url": "https://example.test/garden"},
+    ]
+    with patch("backend.app.graph.nodes.ask", side_effect=AssertionError("API call attempted")), \
+         patch("backend.app.graph.nodes.retrieve", return_value=passages), \
+         patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
+         patch("backend.app.checks.geocode", return_value=None), \
+         patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
+        response = client.post("/plan", json=REQUEST)
+
+    assert response.status_code == 200
+    events = _events(response.text)
+    result = events[-1][1]
+    assert events[-1][0] == "result"
+    assert result["demo"] is True
+    stops = result["draft"]["days"][0]["stops"]
+    assert len(stops) == 3
+    assert all(stop["sources"] for stop in stops)
+    assert all(stop["passage_text"] for stop in stops)

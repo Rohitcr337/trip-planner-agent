@@ -8,6 +8,7 @@ Each node logs: node name, short input, short output, seconds taken.
 import json
 import logging
 import time
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -21,6 +22,11 @@ from backend.app.schemas import TripRequest
 from backend.app.tools import get_weather
 
 logger = logging.getLogger(__name__)
+
+
+def _call_model(prompt: str, state: TripState) -> str:
+    fake_model = state.get("fake_model")
+    return fake_model(prompt) if fake_model is not None else ask(prompt)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -100,7 +106,7 @@ def intake(state: TripState) -> TripState:
     short_in = str(user_input)[:80]
 
     try:
-        raw = ask(prompt)
+        raw = _call_model(prompt, state)
         data = _extract_json(raw)
         req = TripRequest.model_validate(data)
         result = req.model_dump()
@@ -127,6 +133,9 @@ def retrieve_node(state: TripState) -> TripState:
     interests = request.get("interests", [])
     query = " ".join([destination, *interests])
     passages = retrieve(destination, query)
+    fake_model = state.get("fake_model")
+    if fake_model is not None:
+        fake_model.set_passages(passages)
     result = dict(state)
     result["passages"] = passages
     _log("retrieve", query[:80], f"{len(passages)} passages", time.perf_counter() - t0)
@@ -167,6 +176,10 @@ def fetch_node(state: TripState) -> TripState:
     except Exception as exc:  # cost data must never break the graph
         logger.exception("Cost lookup raised unexpectedly")
         city_costs = {"available": False, "reason": str(exc), "complete": False}
+
+    fake_model = state.get("fake_model")
+    if fake_model is not None:
+        fake_model.set_costs(city_costs)
 
     result = dict(state)
     result["live_data"] = {"weather": weather, "costs": city_costs, "city": city}
@@ -229,7 +242,7 @@ def _create_draft(
     previous_draft: dict | None = None,
 ) -> dict:
     """Ask for an itinerary and return its validated, source-enriched form."""
-    raw = ask(build_draft_prompt(state, feedback, previous_draft))
+    raw = _call_model(build_draft_prompt(state, feedback, previous_draft), state)
     return _parse_and_validate_draft(raw, state)
 
 

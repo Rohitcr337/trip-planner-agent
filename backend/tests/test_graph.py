@@ -46,6 +46,7 @@ def _initial_state(**kwargs) -> TripState:
         "revisions": 0,
         "checks": [],
         "unresolved": [],
+        "fake_model": None,
     }
     base.update(kwargs)
     return base

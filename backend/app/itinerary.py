@@ -26,6 +26,7 @@ class Stop(BaseModel):
     notes: str
     outdoor: bool | None = None
     passage_ids: list[int]
+    passage_text: str | None = None
     sources: list[Source] = Field(default_factory=list)
     unverified: bool = False
 

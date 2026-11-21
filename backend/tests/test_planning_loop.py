@@ -34,7 +34,7 @@ def initial_state():
     return {
         "user_input": {"raw": "one day in Jaipur"}, "request": None,
         "passages": [], "live_data": {}, "draft": None, "feedback": [],
-        "revisions": 0, "checks": [], "unresolved": [],
+        "revisions": 0, "checks": [], "unresolved": [], "fake_model": None,
     }
 
 

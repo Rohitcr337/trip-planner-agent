@@ -37,6 +37,7 @@ def _state(**overrides):
         "revisions": 0,
         "checks": [],
         "unresolved": [],
+        "fake_model": None,
     }
     state.update(overrides)
     return state

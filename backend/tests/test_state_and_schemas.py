@@ -31,6 +31,7 @@ class TestTripState:
         assert "revisions" in hints
         assert "checks" in hints
         assert "unresolved" in hints
+        assert "fake_model" in hints
 
     def test_can_create_valid_state(self):
         state: TripState = {
@@ -43,10 +44,12 @@ class TestTripState:
             "revisions": 0,
             "checks": [],
             "unresolved": [],
+            "fake_model": None,
         }
         assert state["revisions"] == 0
         assert state["checks"] == []
         assert state["unresolved"] == []
+        assert state["fake_model"] is None
         assert state["request"] is None
         assert state["passages"] == []
 

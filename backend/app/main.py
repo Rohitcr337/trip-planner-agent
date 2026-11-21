@@ -10,6 +10,7 @@ Endpoints:
 """
 import logging
 import json
+import os
 import time
 from collections.abc import Iterator
 
@@ -19,6 +20,7 @@ from starlette.responses import StreamingResponse
 
 from backend.app.graph.build import intake_graph, planning_graph
 from backend.app.graph.state import TripState
+from backend.app.fake_model import create_fake_model
 from backend.app.quota import ModelCallLimitReached, limit_reached
 from backend.app.schemas import TripRequest
 
@@ -68,6 +70,7 @@ def plan_intake(body: IntakeRequest):
         "revisions": 0,
         "checks": [],
         "unresolved": [],
+        "fake_model": None,
     }
 
     result = intake_graph.invoke(initial_state)
@@ -97,7 +100,8 @@ def _event(event_name: str, payload: dict) -> str:
     return f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _planning_event_stream(request: TripRequest) -> Iterator[str]:
+def _planning_event_stream(request: TripRequest, demo: bool = False) -> Iterator[str]:
+    fake_model = create_fake_model(request.model_dump()) if demo else None
     initial_state: TripState = {
         "user_input": request.model_dump(),
         "request": request.model_dump(),
@@ -108,30 +112,20 @@ def _planning_event_stream(request: TripRequest) -> Iterator[str]:
         "revisions": 0,
         "checks": [],
         "unresolved": [],
+        "fake_model": fake_model,
     }
     current = dict(initial_state)
     previous = time.perf_counter()
     try:
-        for update in planning_graph.stream(initial_state, stream_mode="updates"):
-            for node_name, node_update in update.items():
-                current.update(node_update)
-                now = time.perf_counter()
-                step_name = "draft" if node_name == "draft_itinerary" else node_name
-                message = _STEP_MESSAGES.get(node_name)
-                if message:
-                    yield _event("step", {
-                        "name": step_name,
-                        "message": message,
-                        "elapsed_seconds": round(now - previous, 3),
-                    })
-                previous = now
+        updates = planning_graph.stream(initial_state, stream_mode="updates")
+        yield from _stream_updates(updates, current, previous)
         yield _event("result", {
             "draft": current.get("draft"),
             "checks": current.get("checks", []),
             "revisions": current.get("revisions", 0),
             "unresolved": current.get("unresolved", []),
             "costs_are_estimates": True,
-            "demo": False,
+            "demo": demo,
         })
     except ModelCallLimitReached:
         yield _event("error", {"message": "Daily model call limit reached. Try again tomorrow."})
@@ -140,16 +134,33 @@ def _planning_event_stream(request: TripRequest) -> Iterator[str]:
         yield _event("error", {"message": "Planning failed. Please retry."})
 
 
+def _stream_updates(updates, current: dict, previous: float) -> Iterator[str]:
+    for update in updates:
+        for node_name, node_update in update.items():
+            current.update(node_update)
+            now = time.perf_counter()
+            step_name = "draft" if node_name == "draft_itinerary" else node_name
+            message = _STEP_MESSAGES.get(node_name)
+            if message:
+                yield _event("step", {
+                    "name": step_name,
+                    "message": message,
+                    "elapsed_seconds": round(now - previous, 3),
+                })
+            previous = now
+
+
 @app.post("/plan")
 def plan(request: TripRequest):
     """Stream planning progress and the final checked itinerary as SSE."""
-    if limit_reached():
+    demo = os.getenv("DEMO_MODE") == "1"
+    if not demo and limit_reached():
         raise HTTPException(
             status_code=429,
             detail="Daily model call limit reached. Try again tomorrow.",
         )
     return StreamingResponse(
-        _planning_event_stream(request),
+        _planning_event_stream(request, demo=demo),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

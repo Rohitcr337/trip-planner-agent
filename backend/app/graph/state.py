@@ -4,7 +4,7 @@ graph/state.py — shared state that every node reads from and writes to.
 TripState is a TypedDict so LangGraph can pass it between nodes as a plain
 dict while still giving us type-checker support.
 """
-from typing import TypedDict
+from typing import Any, TypedDict
 
 
 class TripState(TypedDict):
@@ -36,3 +36,6 @@ class TripState(TypedDict):
 
     # Problems that remain after the revision limit is reached.
     unresolved: list[str]
+
+    # Optional request-local deterministic responder used by offline runs.
+    fake_model: Any | None
