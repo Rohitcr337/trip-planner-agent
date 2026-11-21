@@ -4,7 +4,9 @@ import Header from "./components/Header.jsx";
 import TripForm from "./components/TripForm.jsx";
 import DemoBanner from "./components/DemoBanner.jsx";
 import ErrorAlert from "./components/ErrorAlert.jsx";
-import Spinner from "./components/Spinner.jsx";
+import ProgressSteps from "./components/ProgressSteps.jsx";
+import ItineraryTimeline from "./components/ItineraryTimeline.jsx";
+import CostSummary from "./components/CostSummary.jsx";
 
 export default function App() {
   const [plan, setPlan] = useState({ status: "idle", request: null, steps: [], result: null, message: "" });
@@ -58,25 +60,18 @@ export default function App() {
             <h2 id="results-heading" className="text-h2-phone text-text sm:text-h2">
               Your itinerary
             </h2>
-            <div className="mt-6 space-y-6">
-              <p aria-live="polite" className="sr-only">
-                {plan.steps.at(-1)?.message || ""}
-              </p>
-              {plan.status === "idle" && (
-                <p className="text-text-muted">Add your trip details to begin.</p>
-              )}
-              {plan.status === "planning" && (
-                <div role="status" className="flex items-center gap-3 rounded-card bg-surface p-6 shadow-1">
-                  <Spinner />
-                  <span>{plan.steps.at(-1)?.message || "Starting your plan..."}</span>
-                </div>
-              )}
-              {plan.status === "error" && (
-                <ErrorAlert title="Your plan could not be completed" message={plan.message} onRetry={() => startPlan(plan.request)} />
-              )}
+            <div className="mt-6 space-y-8 lg:space-y-12">
               {plan.result?.demo === true && <DemoBanner />}
-              {plan.status === "complete" && (
-                <p className="text-text-muted">Your plan for {plan.request.destination} is ready.</p>
+              {plan.status !== "idle" && (
+                <ProgressSteps steps={plan.steps} status={plan.status} message={plan.message} />
+              )}
+              {plan.status === "error" ? (
+                <ErrorAlert title="Your plan could not be completed" message={plan.message} onRetry={() => startPlan(plan.request)} />
+              ) : (
+                <>
+                  <CostSummary estimate={plan.result?.draft?.total_est_cost_inr ?? null} budget={plan.request?.budget ?? null} loading={plan.status === "planning"} />
+                  <ItineraryTimeline draft={plan.result?.draft ?? null} costsAreEstimates={plan.result?.costs_are_estimates === true} unresolved={plan.result?.unresolved ?? []} status={plan.status} />
+                </>
               )}
             </div>
           </section>

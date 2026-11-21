@@ -1,0 +1,68 @@
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import App from "../App.jsx";
+import { fetchOptions, streamPlan } from "../api.js";
+
+vi.mock("../api.js", () => ({ fetchOptions: vi.fn(), streamPlan: vi.fn() }));
+const options = { cities: ["Jaipur", "Chennai", "Goa"], styles: ["relaxed", "packed"], day_range: { min: 1, max: 7 }, interest_suggestions: ["history", "food"] };
+const draft = { city: "Jaipur", days: [{ day: 1, date: null, weather_note: null, stops: [{ name: "Amber Fort", area: "Amer", time_slot: "morning", duration_minutes: 90, est_cost_inr: 500, notes: "Verify details.", sources: [], unverified: true }] }], total_est_cost_inr: 500, assumptions: [] };
+const result = { draft, checks: [], revisions: 0, unresolved: [], costs_are_estimates: true, demo: true };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  fetchOptions.mockResolvedValue({ ok: true, options });
+});
+
+async function fillAndSubmit() {
+  await screen.findByRole("button", { name: "Plan my trip" });
+  fireEvent.change(screen.getByLabelText("City"), { target: { value: "Jaipur" } });
+  fireEvent.change(screen.getByLabelText("Budget (INR)"), { target: { value: "10000" } });
+  fireEvent.click(screen.getByRole("button", { name: "History" }));
+  fireEvent.click(screen.getByRole("button", { name: "Plan my trip" }));
+}
+
+describe("App", () => {
+  it("shows a streamed error message and can retry", async () => {
+    streamPlan.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ type: "error", data: { message: "Planning failed. Please retry." } });
+    }).mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ type: "result", data: result });
+    });
+    render(<App />);
+    await fillAndSubmit();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Planning failed. Please retry.");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByRole("heading", { name: "Amber Fort" });
+    expect(streamPlan).toHaveBeenCalledTimes(2);
+    expect(streamPlan.mock.calls[1][0]).toEqual(streamPlan.mock.calls[0][0]);
+  });
+
+  it("uses the real result fields and shows the demo banner only when demo is true", async () => {
+    streamPlan.mockImplementation(async (_request, onEvent) => {
+      onEvent({ type: "step", data: { name: "intake", message: "Trip details validated.", elapsed_seconds: 0.1 } });
+      onEvent({ type: "result", data: result });
+    });
+    render(<App />);
+    await fillAndSubmit();
+    expect(await screen.findByText("Sample plan (demo)")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Amber Fort" })).toBeTruthy();
+    expect(screen.getByText("Costs are estimates.")).toBeTruthy();
+    expect(screen.getByText("Within budget")).toBeTruthy();
+    expect(document.querySelectorAll("h1")).toHaveLength(1);
+  });
+
+  it("shows planning skeletons and does not show a demo banner for a non-demo result", async () => {
+    let finish;
+    streamPlan.mockImplementation((_request, onEvent) => new Promise((resolve) => {
+      finish = () => { onEvent({ type: "result", data: { ...result, demo: false } }); resolve({ ok: true }); };
+    }));
+    render(<App />);
+    await fillAndSubmit();
+    expect(await screen.findByRole("button", { name: "Planning..." })).toBeTruthy();
+    expect(screen.getByLabelText("Loading itinerary")).toBeTruthy();
+    await act(async () => finish());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Amber Fort" })).toBeTruthy());
+    expect(screen.queryByText("Sample plan (demo)")).toBeNull();
+  });
+});

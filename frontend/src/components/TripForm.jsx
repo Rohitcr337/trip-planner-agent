@@ -242,7 +242,7 @@ export default function TripForm({ onSubmit, planning = false }) {
                     event.preventDefault();
                     document.getElementById(focusTargets[field])?.focus();
                   }}
-                  className="underline underline-offset-2 hover:no-underline"
+                  className="inline-flex min-h-11 items-center underline underline-offset-2 hover:no-underline"
                 >
                   {FIELD_LABELS[field]}: {visibleErrors[field]}
                 </a>
@@ -304,7 +304,7 @@ export default function TripForm({ onSubmit, planning = false }) {
               id="trip-budget"
               type="number"
               inputMode="decimal"
-              min="1"
+              min="0"
               step="any"
               placeholder="15000"
               value={values.budget}
@@ -334,7 +334,7 @@ export default function TripForm({ onSubmit, planning = false }) {
                   onClick={() => toggleInterest(interest)}
                   className={`inline-flex min-h-11 items-center gap-1.5 rounded-pill border px-4 text-small transition-colors duration-(--duration-press) ease-standard disabled:cursor-not-allowed disabled:border-border disabled:bg-surface-muted disabled:text-text-muted ${
                     selected
-                      ? "border-primary bg-primary-soft font-semibold text-text"
+                      ? "border-primary bg-primary-soft font-semibold text-text hover:border-primary-hover"
                       : "border-border-strong bg-surface text-text hover:bg-surface-muted"
                   }`}
                 >
@@ -350,7 +350,6 @@ export default function TripForm({ onSubmit, planning = false }) {
           <input
             id="trip-interests-other"
             type="text"
-            maxLength={200}
             value={values.otherInterests}
             onChange={(event) => update("otherInterests", event.target.value)}
             aria-invalid={Boolean(visibleErrors.interests)}
