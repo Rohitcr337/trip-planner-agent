@@ -12,7 +12,7 @@ REQUEST = {
     "interests": ["history"], "style": "relaxed", "start_date": None,
 }
 PASSAGE = {
-    "text": "Amber Fort is a historic fort.", "section": "Amber Fort",
+    "text": "- Amber Fort — a historic fort in Amer.", "section": "See",
     "source_name": "Guide", "source_url": "https://example.test/guide",
 }
 CITY_COSTS = {
@@ -75,7 +75,7 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     stop = result["draft"]["days"][0]["stops"][0]
     assert stop["lat"] == 26.9124 and stop["lon"] == 75.7873
     assert "passage_text" not in stop
-    assert stop["excerpt"] == "Amber Fort is a historic fort."
+    assert stop["excerpt"] == "a historic fort in Amer"
     assert result["checks"]
     assert result["revisions"] == 0
     assert result["unresolved"] == []
@@ -130,9 +130,9 @@ def test_demo_mode_uses_passage_grounded_plan_without_api_calls(tmp_path, monkey
     passages = [
         PASSAGE,
         {"text": "Local food stalls serve traditional dishes at Baga Beach.",
-         "section": "Food and dining", "source_name": "Goa Guide",
+         "section": "Eat", "source_name": "Goa Guide",
          "source_url": "https://example.test/food"},
-        {"text": "A quiet garden sits near the city museum.", "section": "City Garden",
+        {"text": "- City Garden — a quiet garden near the museum.", "section": "Do",
          "source_name": "Jaipur Guide", "source_url": "https://example.test/garden"},
     ]
     with patch("backend.app.graph.nodes.ask", side_effect=AssertionError("API call attempted")), \

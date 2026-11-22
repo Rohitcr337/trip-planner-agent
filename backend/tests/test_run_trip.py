@@ -11,7 +11,7 @@ RUN_SCRIPT = PROJECT_ROOT / "scripts" / "run_trip.py"
 
 PASSAGE = {
     "text": "- **Amber Fort** &mdash; a historic fort in Amer. - Jaigarh Fort — a hilltop fort near Jaipur.",
-    "section": "Sights",
+    "section": "See",
     "source_name": "Jaipur Guide",
     "source_url": "https://example.test/jaipur",
 }

@@ -41,17 +41,7 @@ _CONTEXT_PLACE = re.compile(
     r"\b(?:in|near|at|to)\s+"
     r"((?:[A-Z][A-Za-z’'-]*|and|&)(?:\s+(?:[A-Z][A-Za-z’'-]*|and|&|of|the)){0,3})"
 )
-_FALLBACK_TOPICS = {
-    "understand": "Guide Overview",
-    "overview": "Guide Overview",
-    "eat": "Dining",
-    "drink": "Drinks",
-    "sleep": "Accommodation",
-    "buy": "Shopping",
-    "do": "Activities",
-    "see": "Sights",
-    "beaches": "Beaches",
-}
+ACTIVITY_SECTIONS = {"see", "do", "eat", "drink"}
 _DISTRICT_PATTERNS = (
     re.compile(r"\b(?:North|South)\s+Goa\b", re.IGNORECASE),
     re.compile(r"\bBardez\b", re.IGNORECASE),
@@ -78,19 +68,6 @@ def _valid_name(value: str, city: str) -> str | None:
             or not words[0][0].isupper()):
         return None
     return name
-
-
-def _fallback_name(section: str, city: str) -> str:
-    heading = clean_text(section.split(" > ")[-1]).strip(" .:-")
-    heading = _FALLBACK_TOPICS.get(heading.casefold(), heading)
-    words = heading.split()
-    while words and words[0].casefold() in {"a", "an", "the"}:
-        words.pop(0)
-    if not words:
-        words = ["Guide"]
-    if " ".join(words).casefold() == city.casefold():
-        words = ["Guide"]
-    return " ".join([city, *words[:4]])
 
 
 def _fallback_candidates(text: str, city: str, passage_index: int, passage: dict[str, Any]) -> list[dict[str, Any]]:
@@ -128,6 +105,9 @@ def _fallback_candidates(text: str, city: str, passage_index: int, passage: dict
 
 
 def _passage_items(passage: dict[str, Any], passage_index: int, city: str) -> list[dict[str, Any]]:
+    section = clean_text(str(passage.get("section") or "").split(" > ")[-1]).casefold()
+    if section not in ACTIVITY_SECTIONS:
+        return []
     text = clean_text(str(passage.get("text") or ""))
     items: list[dict[str, Any]] = []
     for segment in _LIST_ITEM.split(text):
@@ -145,13 +125,6 @@ def _passage_items(passage: dict[str, Any], passage_index: int, city: str) -> li
             })
     if not items:
         items = _fallback_candidates(text, city, passage_index, passage)
-    if not items:
-        items.append({
-            "name": _fallback_name(str(passage.get("section") or "Guide passage"), city),
-            "description": _truncate_excerpt(text),
-            "passage_index": passage_index,
-            "passage": passage,
-        })
     return items
 
 

@@ -5,14 +5,14 @@ from backend.app.fake_model import _passage_items, create_fake_model
 
 
 PASSAGES = [
-    {"text": "- **Amber Fort** — historic fort in Amer.", "section": "Sights",
+    {"text": "- **Amber Fort** — historic fort in Amer.", "section": "See",
      "source_name": "Jaipur Guide", "source_url": "https://example.test/fort"},
     {"text": "- Baga Beach &mdash; local food stalls in North Goa.\n- Anjuna beach — flea market in Bardez.",
-     "section": "Beaches", "source_name": "Goa Guide", "source_url": "https://example.test/beaches"},
+     "section": "See", "source_name": "Goa Guide", "source_url": "https://example.test/beaches"},
     {"text": "- Panjim Cafe — serves breakfast and snacks in Panjim.\n- Fort Aguada — a historic site in Bardez district.",
-     "section": "Places", "source_name": "Goa Guide", "source_url": "https://example.test/places"},
+     "section": "Eat", "source_name": "Goa Guide", "source_url": "https://example.test/places"},
     {"text": "- Chapora — home of the Chapora fort in North Goa.\n- **Kitesurfing** &mdash; try the activity near Morjim.\n- Vagator beach — a beach in Bardez.",
-     "section": "Activities", "source_name": "Goa Guide", "source_url": "https://example.test/activities"},
+     "section": "Do", "source_name": "Goa Guide", "source_url": "https://example.test/activities"},
 ]
 COSTS = {"typical_entry_fee_low": 42, "meal_budget": 123}
 BANNED = {"if", "this", "the", "it", "you", "there", "once", "now", "indian", "southern", "beaches"}
@@ -55,23 +55,21 @@ def test_fake_plan_uses_unique_items_and_city_costs_for_each_style(style, expect
     assert next(stop for stop in stops if stop["name"] == "Fort Aguada")["area"] == "Bardez"
 
 
-def test_invalid_or_fragment_items_use_section_heading_fallback():
+def test_invalid_or_fragment_items_do_not_use_section_heading_fallback():
     fake = create_fake_model({"destination": "Goa", "days": 1, "style": "relaxed"})
     fake.set_passages([{
         "text": "- Indian &mdash; phrase fragment. - Southern &mdash; another fragment. - 1. Beaches Goa &mdash; heading fragment.",
-        "section": "Beaches", "source_name": "Guide", "source_url": "https://example.test",
+        "section": "See", "source_name": "Guide", "source_url": "https://example.test",
     }])
     result = json.loads(fake("draft"))
-    stop = result["days"][0]["stops"][0]
-    assert stop["name"] == "Goa Beaches"
-    assert len(stop["name"].split()) <= 5
+    assert result["days"][0]["stops"] == []
 
 
 def test_fake_model_produces_fewer_stops_instead_of_repeating_items():
     fake = create_fake_model({"destination": "Goa", "days": 2, "style": "relaxed"})
     fake.set_passages([{
         "text": "- Chapora — home of the fort. - Agonda — a quiet beach.",
-        "section": "Places", "source_name": "Guide", "source_url": "https://example.test",
+        "section": "See", "source_name": "Guide", "source_url": "https://example.test",
     }])
     result = json.loads(fake("draft"))
     assert [len(day["stops"]) for day in result["days"]] == [2, 0]
@@ -85,7 +83,28 @@ def test_unstructured_passage_uses_a_place_name_from_its_text():
         "section": "Understand", "source_name": "Guide", "source_url": "https://example.test",
     }
     items = _passage_items(passage, 0, "Jaipur")
-    assert items[0]["name"] == "Ramgarh Lake"
+    assert items == []
+
+
+@pytest.mark.parametrize("section", [
+    "Understand", "Overview", "Get in", "Get around", "Sleep", "Accommodation",
+    "Buy", "Shopping", "Stay safe", "Talk", "Connect", "Cope", "Beaches",
+])
+def test_non_activity_sections_never_create_sample_stops(section):
+    fake = create_fake_model({"destination": "Goa", "days": 1, "style": "relaxed"})
+    fake.set_passages([{
+        "text": "- Chapora — a historic fort. - Baga Beach — a sandy beach.",
+        "section": section, "source_name": "Guide", "source_url": "https://example.test",
+    }])
+    result = json.loads(fake("draft"))
+    assert result["days"][0]["stops"] == []
+
+
+def test_activity_section_matching_is_case_insensitive():
+    items = _passage_items({
+        "text": "- Chapora — a historic fort.", "section": "sEe",
+    }, 0, "Goa")
+    assert [item["name"] for item in items] == ["Chapora"]
 
 
 def test_fake_model_handles_intake_prompt():
