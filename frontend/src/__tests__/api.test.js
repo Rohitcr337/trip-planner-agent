@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { API_URL, createEventParser, fetchOptions, MESSAGES, streamPlan } from "../api.js";
 
 const request = { destination: "Jaipur", days: 2, budget: 10000, interests: ["history"], style: "relaxed", start_date: null };
-const options = { cities: ["Jaipur", "Chennai", "Goa"], styles: ["relaxed", "packed"], day_range: { min: 1, max: 7 }, interest_suggestions: ["history", "food"] };
+const options = { cities: ["Jaipur", "Chennai", "Goa"], destinations: [{ name: "Jaipur", lat: 26.9, lon: 75.8 }, { name: "Chennai", lat: 13.1, lon: 80.3 }, { name: "Goa", lat: 15.5, lon: 73.8 }], styles: ["relaxed", "packed"], day_range: { min: 1, max: 7 }, interest_suggestions: ["history", "food"] };
 const step = { name: "intake", message: "Trip details validated.", elapsed_seconds: 0.2 };
 const result = { draft: null, checks: [], revisions: 0, unresolved: [], costs_are_estimates: true, demo: true };
 
@@ -134,6 +134,8 @@ describe("fetchOptions", () => {
 
   it("returns an error for invalid options and never rejects on a network failure", async () => {
     mockFetch(new Response("{}"));
+    await expect(fetchOptions()).resolves.toEqual({ ok: false, message: MESSAGES.optionsFailed });
+    mockFetch(new Response(JSON.stringify({ ...options, destinations: [{ lat: 1, lon: 2 }] })));
     await expect(fetchOptions()).resolves.toEqual({ ok: false, message: MESSAGES.optionsFailed });
     fetch.mockRejectedValue(new TypeError("Failed to fetch"));
     await expect(fetchOptions()).resolves.toEqual({ ok: false, message: MESSAGES.unreachable });

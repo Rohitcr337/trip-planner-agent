@@ -60,7 +60,7 @@ function Planner() {
         <section aria-labelledby="results-heading" className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <h2 id="results-heading" className="text-h2-phone text-text sm:text-h2">
-              Your itinerary
+              {plan.request ? `Your ${plan.request.destination} itinerary` : "Your itinerary"}
             </h2>
             {plan.result?.demo === true && <PreviewChip />}
           </div>

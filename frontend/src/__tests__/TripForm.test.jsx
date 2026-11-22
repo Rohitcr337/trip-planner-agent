@@ -5,7 +5,7 @@ import { fetchOptions } from "../api.js";
 
 vi.mock("../api.js", () => ({ fetchOptions: vi.fn() }));
 
-const options = { cities: ["Jaipur", "Chennai", "Goa"], styles: ["relaxed", "packed"], day_range: { min: 1, max: 7 }, interest_suggestions: ["history", "food"] };
+const options = { cities: ["Jaipur", "Chennai", "Goa"], destinations: [{ name: "Jaipur", lat: 26.9, lon: 75.8 }, { name: "Chennai", lat: 13.1, lon: 80.3 }, { name: "Goa", lat: 15.5, lon: 73.8 }], styles: ["relaxed", "packed"], day_range: { min: 1, max: 7 }, interest_suggestions: ["history", "food"] };
 const validValues = { destination: "Jaipur", days: "3", budget: "15000", interests: ["history"], otherInterests: "", style: "relaxed", startDate: "" };
 
 beforeEach(() => fetchOptions.mockResolvedValue({ ok: true, options }));
@@ -50,9 +50,9 @@ describe("TripForm", () => {
     fireEvent.click(submit);
     const summary = screen.getByRole("alert");
     await waitFor(() => expect(document.activeElement).toBe(summary));
-    expect(screen.getByRole("link", { name: /City: Choose a city/ }).getAttribute("href")).toBe("#trip-destination");
-    fireEvent.click(screen.getByRole("link", { name: /City: Choose a city/ }));
-    expect(document.activeElement).toBe(screen.getByLabelText("City"));
+    expect(screen.getByRole("link", { name: /Destination: Choose a destination from the list/ }).getAttribute("href")).toBe("#trip-destination");
+    fireEvent.click(screen.getByRole("link", { name: /Destination: Choose a destination from the list/ }));
+    expect(document.activeElement).toBe(screen.getByLabelText("Destination"));
     expect(screen.getByLabelText("Budget (INR)").getAttribute("aria-invalid")).toBe("true");
     expect(screen.getByText(/Total per person, in INR/)).toBeTruthy();
     expect(onSubmit).not.toHaveBeenCalled();
@@ -62,7 +62,7 @@ describe("TripForm", () => {
     const onSubmit = vi.fn();
     render(<TripForm onSubmit={onSubmit} />);
     await screen.findByRole("button", { name: "Plan my trip" });
-    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Goa" } });
+    fireEvent.change(screen.getByLabelText("Destination"), { target: { value: "Goa" } });
     fireEvent.change(screen.getByLabelText("Days"), { target: { value: "2" } });
     fireEvent.change(screen.getByLabelText("Budget (INR)"), { target: { value: "12000" } });
     fireEvent.click(screen.getByRole("button", { name: "Food" }));
@@ -78,7 +78,7 @@ describe("TripForm", () => {
     const onSubmit = vi.fn();
     render(<TripForm onSubmit={onSubmit} />);
     await screen.findByRole("button", { name: "Plan my trip" });
-    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Chennai" } });
+    fireEvent.change(screen.getByLabelText("Destination"), { target: { value: "Chennai" } });
     fireEvent.change(screen.getByLabelText("Budget (INR)"), { target: { value: "5000" } });
     fireEvent.click(screen.getByRole("button", { name: "History" }));
     fireEvent.click(screen.getByRole("button", { name: "History" }));
@@ -91,7 +91,7 @@ describe("TripForm", () => {
     render(<TripForm planning />);
     const button = await screen.findByRole("button", { name: "Planning..." });
     expect(button.disabled).toBe(true);
-    expect(screen.getByLabelText("City").closest("fieldset").disabled).toBe(true);
+    expect(screen.getByLabelText("Destination").closest("fieldset").disabled).toBe(true);
   });
 
   it("shows an options error and retries", async () => {

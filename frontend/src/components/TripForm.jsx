@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, CircleAlert } from "lucide-react";
 import { fetchOptions } from "../api.js";
 import ErrorAlert from "./ErrorAlert.jsx";
+import DestinationCombobox from "./DestinationCombobox.jsx";
 import Spinner from "./Spinner.jsx";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const FIELD_ORDER = ["destination", "days", "budget", "interests", "style", "startDate"];
 const FIELD_LABELS = {
-  destination: "City",
+  destination: "Destination",
   days: "Days",
   budget: "Budget",
   interests: "Interests",
@@ -45,11 +46,15 @@ function isRealDate(text) {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text;
 }
 
+function destinationNames(options) {
+  return options.destinations.map((destination) => destination.name);
+}
+
 export function validateTrip(values, options) {
   const errors = {};
   const { min, max } = options.day_range;
 
-  if (!options.cities.includes(values.destination)) errors.destination = "Choose a city.";
+  if (!destinationNames(options).includes(values.destination)) errors.destination = "Choose a destination from the list.";
 
   const daysText = String(values.days ?? "").trim();
   const days = Number(daysText);
@@ -255,23 +260,17 @@ export default function TripForm({ onSubmit, planning = false }) {
       <fieldset disabled={planning} className="min-w-0 space-y-6">
         <div>
           <label htmlFor="trip-destination" className="text-small font-semibold text-text">
-            City
+            Destination
           </label>
-          <select
+          <DestinationCombobox
             id="trip-destination"
+            names={destinationNames(options)}
             value={values.destination}
-            onChange={(event) => update("destination", event.target.value)}
-            aria-invalid={Boolean(visibleErrors.destination)}
-            aria-describedby={describedBy("trip-destination", { error: visibleErrors.destination })}
-            className={`${inputBase} mt-2 ${visibleErrors.destination ? "border-danger hover:border-danger" : "border-border-strong"}`}
-          >
-            <option value="">Choose a city</option>
-            {options.cities.map((city) => (
-              <option key={city} value={city}>
-                {city}
-              </option>
-            ))}
-          </select>
+            onChange={(name) => update("destination", name)}
+            invalid={Boolean(visibleErrors.destination)}
+            describedBy={describedBy("trip-destination", { error: visibleErrors.destination })}
+            inputClassName={`${inputBase} ${visibleErrors.destination ? "border-danger hover:border-danger" : "border-border-strong"}`}
+          />
           <FieldMessage id="trip-destination" error={visibleErrors.destination} />
         </div>
 

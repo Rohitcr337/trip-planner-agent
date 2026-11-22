@@ -35,7 +35,8 @@ async function readJson(response) {
 function validOptions(data) {
   return (
     data &&
-    Array.isArray(data.cities) &&
+    Array.isArray(data.destinations) &&
+    data.destinations.every((item) => typeof item?.name === "string" && item.name) &&
     Array.isArray(data.styles) &&
     Array.isArray(data.interest_suggestions) &&
     Number.isInteger(data.day_range?.min) &&
