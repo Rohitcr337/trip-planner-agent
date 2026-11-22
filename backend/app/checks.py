@@ -25,7 +25,40 @@ def _days(draft: dict) -> list[dict]:
     return draft.get("days") or []
 
 
+def trip_cost_breakdown(draft: dict, request: dict, costs: dict) -> dict[str, float | bool | None]:
+    """Recompute trip costs and show which parts cannot be estimated."""
+    days = int(request.get("days", len(_days(draft))))
+    stops = [
+        (day.get("day", day_index), stop)
+        for day_index, day in enumerate(_days(draft), 1)
+        for stop in day.get("stops", [])
+    ]
+    stop_total = sum(float(stop.get("est_cost_inr") or 0) for _, stop in stops)
+    budget = float(request["budget"]) if request.get("budget") is not None else None
+    transport_keys = ("local_transport_per_day", "meal_budget")
+    transport_meals = None
+    if all(costs.get(key) is not None for key in transport_keys):
+        transport_meals = days * (
+            float(costs["local_transport_per_day"])
+            + MEALS_PER_DAY * float(costs["meal_budget"])
+        )
+    stay = None
+    if costs.get("stay_budget_per_night") is not None:
+        stay = max(days - 1, 0) * float(costs["stay_budget_per_night"])
+    estimate = stop_total + transport_meals + stay if transport_meals is not None and stay is not None else None
+    complete = costs.get("complete") is not False and transport_meals is not None and stay is not None
+    return {
+        "stops_inr": stop_total,
+        "transport_meals_inr": transport_meals,
+        "stay_inr": stay,
+        "estimate_inr": estimate,
+        "budget_inr": budget,
+        "complete": complete,
+    }
+
+
 def check_budget(draft: dict, request: dict, costs: dict) -> CheckResult:
+    breakdown = trip_cost_breakdown(draft, request, costs)
     days = int(request.get("days", len(_days(draft))))
     stops = [
         (day.get("day", day_index), stop)
@@ -36,21 +69,15 @@ def check_budget(draft: dict, request: dict, costs: dict) -> CheckResult:
         f"Day {day_number}, {stop.get('name', 'unnamed stop')}"
         for day_number, stop in stops if stop.get("est_cost_inr") is None
     ]
-    required = ("local_transport_per_day", "meal_budget", "stay_budget_per_night")
-    if costs.get("complete") is False or any(costs.get(key) is None for key in required):
+    if not breakdown["complete"]:
         reason = "skipped: cost data is incomplete; budget was not checked."
         logger.warning(reason)
         return CheckResult(True, reason)
-    if any(key not in costs for key in required):
-        reason = "skipped: cost data is incomplete; budget was not checked."
-        logger.warning(reason)
-        return CheckResult(True, reason)
-    stop_total = sum(float(stop.get("est_cost_inr") or 0) for _, stop in stops)
-    transport_meals = days * (float(costs["local_transport_per_day"]) + MEALS_PER_DAY * float(costs["meal_budget"]))
-    nights = max(days - 1, 0)
-    stay_total = nights * float(costs["stay_budget_per_night"])
-    estimate = stop_total + transport_meals + stay_total
-    budget = float(request["budget"])
+    stop_total = float(breakdown["stops_inr"])
+    transport_meals = float(breakdown["transport_meals_inr"])
+    stay_total = float(breakdown["stay_inr"])
+    estimate = float(breakdown["estimate_inr"])
+    budget = float(breakdown["budget_inr"])
     if estimate <= budget + BUDGET_TOLERANCE:
         note = f" Missing stop costs counted as 0: {', '.join(missing)}." if missing else ""
         return CheckResult(True, f"Estimated total INR {estimate:.2f} is within per-person trip budget INR {budget:.2f}.{note}")

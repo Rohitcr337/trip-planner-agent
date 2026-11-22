@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from backend.app.checks import check_budget, check_logistics, check_sources, run_checks
+from backend.app.checks import check_budget, check_logistics, check_sources, run_checks, trip_cost_breakdown
 
 
 def draft(stops=None):
@@ -23,6 +23,34 @@ def test_budget_uses_code_total_and_edges():
     assert check_budget(d, {**REQUEST, "budget": 400}, COSTS).passed
     assert check_budget(d, {**REQUEST, "budget": 401}, COSTS).passed
     assert not check_budget(d, {**REQUEST, "budget": 399.99}, COSTS).passed
+
+
+def test_cost_breakdown_matches_budget_check_arithmetic():
+    breakdown = trip_cost_breakdown(draft(), REQUEST, COSTS)
+    assert breakdown == {
+        "stops_inr": 100.0,
+        "transport_meals_inr": 300.0,
+        "stay_inr": 0.0,
+        "estimate_inr": 400.0,
+        "budget_inr": 500.0,
+        "complete": True,
+    }
+    assert "Estimated total INR 400.00" in check_budget(draft(), REQUEST, COSTS).reason
+
+
+def test_cost_breakdown_marks_unavailable_amounts_as_null():
+    breakdown = trip_cost_breakdown(
+        draft(), REQUEST,
+        {"complete": False, "local_transport_per_day": 100, "meal_budget": 100},
+    )
+    assert breakdown == {
+        "stops_inr": 100.0,
+        "transport_meals_inr": 300.0,
+        "stay_inr": None,
+        "estimate_inr": None,
+        "budget_inr": 500.0,
+        "complete": False,
+    }
 
 
 def test_incomplete_costs_skip_and_missing_stop_cost_counts_zero():

@@ -62,6 +62,14 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     event_name, result = events[-1]
     assert event_name == "result"
     assert result["draft"]["city"] == "Jaipur"
+    assert result["cost_breakdown"] == {
+        "stops_inr": 10.0,
+        "transport_meals_inr": 250.0,
+        "stay_inr": 0.0,
+        "estimate_inr": 260.0,
+        "budget_inr": 1000.0,
+        "complete": True,
+    }
     stop = result["draft"]["days"][0]["stops"][0]
     assert stop["lat"] is None and stop["lon"] is None
     assert result["checks"]

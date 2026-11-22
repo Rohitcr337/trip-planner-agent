@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.graph.build import intake_graph, planning_graph
 from backend.app.graph.state import TripState
 from backend.app.fake_model import create_fake_model
+from backend.app.checks import trip_cost_breakdown
 from backend.app.quota import ModelCallLimitReached, limit_reached
 from backend.app.schemas import TripRequest
 
@@ -157,6 +158,11 @@ def _planning_event_stream(request: TripRequest, demo: bool = False) -> Iterator
         yield from _stream_updates(updates, current, previous)
         yield _event("result", {
             "draft": current.get("draft"),
+            "cost_breakdown": trip_cost_breakdown(
+                current.get("draft") or {},
+                request.model_dump(),
+                (current.get("live_data") or {}).get("costs") or {},
+            ),
             "checks": current.get("checks", []),
             "revisions": current.get("revisions", 0),
             "unresolved": current.get("unresolved", []),
