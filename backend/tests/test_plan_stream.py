@@ -73,6 +73,8 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     }
     stop = result["draft"]["days"][0]["stops"][0]
     assert stop["lat"] == 26.9124 and stop["lon"] == 75.7873
+    assert "passage_text" not in stop
+    assert stop["excerpt"] == "Amber Fort is a historic fort."
     assert result["checks"]
     assert result["revisions"] == 0
     assert result["unresolved"] == []
@@ -147,4 +149,5 @@ def test_demo_mode_uses_passage_grounded_plan_without_api_calls(tmp_path, monkey
     stops = result["draft"]["days"][0]["stops"]
     assert len(stops) == 3
     assert all(stop["sources"] for stop in stops)
-    assert all(stop["passage_text"] for stop in stops)
+    assert all(0 < len(stop["excerpt"]) <= 200 for stop in stops)
+    assert all("passage_text" not in stop for stop in stops)

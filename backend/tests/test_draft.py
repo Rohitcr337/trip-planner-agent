@@ -61,6 +61,8 @@ def _draft_json(passage_ids=None):
                             "notes": "Check current details.",
                             "outdoor": True,
                             "passage_ids": passage_ids if passage_ids is not None else [1],
+                            "passage_text": "whole passage must not be returned",
+                            "excerpt": "model output is replaced by passage evidence",
                         }
                     ],
                     "weather_note": None,
@@ -87,6 +89,8 @@ def test_draft_node_validates_and_fills_sources():
     ]
     assert stop["unverified"] is False
     assert stop["outdoor"] is True
+    assert stop["excerpt"] == "Amber Fort is a historic fort."
+    assert "passage_text" not in stop
 
 
 def test_invalid_passage_ids_and_empty_citations_are_unverified():

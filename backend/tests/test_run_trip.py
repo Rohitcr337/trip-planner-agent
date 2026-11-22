@@ -10,8 +10,8 @@ RUN_SCRIPT = PROJECT_ROOT / "scripts" / "run_trip.py"
 
 
 PASSAGE = {
-    "text": "Amber Fort is a historic fort in Amer.",
-    "section": "Amber Fort",
+    "text": "- **Amber Fort** &mdash; a historic fort in Amer. - Jaigarh Fort — a hilltop fort near Jaipur.",
+    "section": "Sights",
     "source_name": "Jaipur Guide",
     "source_url": "https://example.test/jaipur",
 }
@@ -64,11 +64,17 @@ def test_offline_run_uses_retrieved_stops_and_makes_no_model_or_http_calls():
 
     assert result["draft"]["days"][0]["stops"][0]["name"] == "Amber Fort"
     assert result["draft"]["days"][0]["stops"][0]["sources"][0]["source_name"] == "Jaipur Guide"
+    stops = [stop for day in result["draft"]["days"] for stop in day["stops"]]
+    assert all(stop["sources"] for stop in stops)
+    assert all(0 < len(stop["excerpt"]) <= 200 for stop in stops)
+    assert all("passage_text" not in stop for stop in stops)
+    assert len({stop["name"] for stop in stops}) == len(stops)
     assert result["revisions"] == 0
     assert all(item["passed"] for item in result["checks"])
     assert "Costs are estimates." in lines
     assert any("Real model calls: 0" in line for line in lines)
     assert any("PASS budget" in line for line in lines)
+    assert any(line.startswith("    Excerpt:") for line in lines)
 
 
 def test_offline_fake_also_handles_revision_prompts():

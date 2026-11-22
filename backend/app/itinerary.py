@@ -29,7 +29,7 @@ class Stop(BaseModel):
     lat: float | None = None
     lon: float | None = None
     passage_ids: list[int]
-    passage_text: str | None = None
+    excerpt: str = ""
     sources: list[Source] = Field(default_factory=list)
     unverified: bool = False
 
@@ -94,6 +94,7 @@ Rules:
 - Output JSON only and nothing else.
 - Plan exactly the requested number of days.
 - Every stop must list in passage_ids the numbers of the passages that support it, or [] if none do.
+- Do not include passage_text or copy full passages into a stop; include only a short excerpt when useful.
 - For each stop, set outdoor to true if the stop is mostly outdoors, otherwise false; use null if unknown.
 - Do not invent facts, prices, or opening hours; put uncertainty in notes.
 - Keep each day's stops in a sensible geographic order using area for the neighbourhood or district.

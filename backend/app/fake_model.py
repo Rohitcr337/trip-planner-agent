@@ -6,6 +6,8 @@ import re
 from datetime import date, timedelta
 from typing import Any
 
+from backend.app.text import clean_text
+
 
 TIME_SLOTS = {
     "relaxed": ("morning", "afternoon", "evening"),
@@ -16,84 +18,111 @@ FOOD_TERMS = (
     "dining", "breakfast", "lunch", "dinner", "snack", "dish", "street food",
 )
 OUTDOOR_TERMS = ("beach", "fort", "garden", "hill", "waterfall", "park", "lake", "outdoor")
-
-
-_NAME_START_WORDS = {
-    "a", "an", "and", "as", "at", "but", "by", "cafes", "cafe", "for",
-    "famous", "food", "from", "here", "if", "in", "it", "local", "many",
-    "most", "of", "once", "one", "our", "people", "several", "some", "the",
-    "there", "they", "this", "visitors", "we", "you",
+BANNED_NAME_STARTS = {
+    "a", "an", "and", "as", "at", "but", "by", "famous", "for", "from",
+    "here", "if", "in", "indian", "it", "local", "many", "most", "now",
+    "of", "once", "one", "our", "people", "several", "some", "southern",
+    "northern", "eastern", "western", "the", "there", "they", "this", "visitors",
+    "we", "you", "beaches",
 }
-_MARKUP = re.compile(r"<[^>]*>|\*\*|__|'''|''|`|^\s*#{1,6}\s*")
-_BOLD_NAME = re.compile(r"\*\*(.+?)\*\*|__(.+?)__|'''(.+?)'''|''(.+?)''")
-_PROPER_NOUN = re.compile(
-    r"\b[A-Z][A-Za-z0-9’'-]*(?:\s+(?:[A-Z][A-Za-z0-9’'-]*|of|the|and|at|in|on|de|da)){0,4}"
+_LIST_ITEM = re.compile(r"(?:^|\s)-\s+")
+_DISTRICT_PATTERNS = (
+    re.compile(r"\b(?:North|South)\s+Goa\b", re.IGNORECASE),
+    re.compile(r"\bBardez\b", re.IGNORECASE),
+    re.compile(
+        r"\b([A-Z][A-Za-z'’.-]*(?:\s+[A-Z][A-Za-z'’.-]*){0,2})\s+(?:district|taluka)\b",
+        re.IGNORECASE,
+    ),
 )
 
 
-def _clean_name_candidate(value: str) -> str:
-    value = _MARKUP.sub("", value)
-    value = re.sub(r"^\s*(?:(?:[-*+•]\s+)|(?:\d+[.)]\s*)|(?:\d+\s+))+", "", value)
-    value = re.sub(r"\s+", " ", value).strip(" \t\r\n:;,.—–-_'\"()[]{}")
-    return " ".join(value.split()[:6])
-
-
-def _usable_name(value: str, city: str) -> str | None:
-    candidate = _clean_name_candidate(value)
-    if not candidate or candidate.casefold() == city.casefold():
+def _valid_name(value: str, city: str) -> str | None:
+    name = clean_text(value).strip(" \t\r\n:;,.—–-_'\"()[]{}")
+    name = re.sub(r"\s*\([^)]*\)\s*$", "", name).strip()
+    words = name.split()
+    if not 1 <= len(words) <= 5 or name.casefold() == city.casefold():
         return None
-    words = candidate.split()
-    while len(words) > 1 and words[0].casefold() in _NAME_START_WORDS:
-        words.pop(0)
-    candidate = " ".join(words)
     first = re.sub(r"[^A-Za-z]+$", "", words[0]).casefold()
-    if (not first or first in _NAME_START_WORDS or first[0].isdigit()
-            or not words[0][0].isupper()):
+    if not first or first[0].isdigit() or first in BANNED_NAME_STARTS:
         return None
-    return candidate
+    return name
 
 
-def _name_from_passage(passage: dict[str, Any], city: str) -> str:
-    text = str(passage.get("text") or "")
-    for match in _BOLD_NAME.finditer(text):
-        value = next(group for group in match.groups() if group is not None)
-        candidate = _usable_name(value, city)
-        if candidate:
-            return candidate
+def _fallback_name(section: str, city: str) -> str:
+    heading = clean_text(section.split(" > ")[-1]).strip(" .:-")
+    words = heading.split()
+    while words and words[0].casefold() in BANNED_NAME_STARTS:
+        words.pop(0)
+    if not words:
+        words = ["Guide"]
+    if " ".join(words).casefold() == city.casefold():
+        words = ["Guide"]
+    return " ".join([*words[:4], city])
 
-    for match in _PROPER_NOUN.finditer(text):
-        candidate = _usable_name(match.group(0), city)
-        if candidate:
-            return candidate
 
-    leading_item = re.split(r"\s+[—–-]\s+|\s*:\s*", text, maxsplit=1)[0]
-    candidate = _usable_name(leading_item, city)
-    if candidate:
-        return candidate
+def _passage_items(passage: dict[str, Any], passage_index: int, city: str) -> list[dict[str, Any]]:
+    text = clean_text(str(passage.get("text") or ""))
+    items: list[dict[str, Any]] = []
+    for segment in _LIST_ITEM.split(text):
+        if "—" not in segment:
+            continue
+        raw_name, raw_description = segment.split("—", 1)
+        name = _valid_name(raw_name, city)
+        description = clean_text(raw_description).strip(" —–-:;,.\t")
+        if name:
+            items.append({
+                "name": name,
+                "description": description,
+                "passage_index": passage_index,
+                "passage": passage,
+            })
+    if not items:
+        items.append({
+            "name": _fallback_name(str(passage.get("section") or "Guide passage"), city),
+            "description": _truncate_excerpt(text),
+            "passage_index": passage_index,
+            "passage": passage,
+        })
+    return items
 
-    section = str(passage.get("section") or "Guide passage")
-    heading = section.split(" > ")[-1].strip() or "Guide passage"
-    fallback_words = _clean_name_candidate(f"{heading}, {city}").split()
-    while len(fallback_words) > 1 and fallback_words[0].casefold() in _NAME_START_WORDS:
-        fallback_words.pop(0)
-    if fallback_words:
-        fallback_words[0] = fallback_words[0][:1].upper() + fallback_words[0][1:]
-    fallback = " ".join(fallback_words[:6])
-    return fallback or _clean_name_candidate(f"Guide passage, {city}")
+
+def _all_items(passages: list[dict[str, Any]], city: str) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for passage_index, passage in enumerate(passages):
+        for item in _passage_items(passage, passage_index, city):
+            key = item["name"].casefold()
+            if key not in seen:
+                items.append(item)
+                seen.add(key)
+    return items
 
 
 def _area_from_passage(text: str, city: str) -> str:
-    patterns = (
-        r"\b(?:in|near|at|around|along|within)\s+([A-Z][A-Za-z’'-]*(?:\s+[A-Z][A-Za-z’'-]*){0,2})",
-        r"\b(?:located|situated)\s+in\s+([A-Z][A-Za-z’'-]*(?:\s+[A-Z][A-Za-z’'-]*){0,2})",
-    )
-    for pattern in patterns:
-        match = re.search(pattern, text)
+    text = clean_text(text)
+    for pattern in _DISTRICT_PATTERNS:
+        match = pattern.search(text)
         if match:
-            area = match.group(1).strip(" ,.;:")
-            if area.casefold() != city.casefold():
-                return area
+            return clean_text(match.group(1) if match.lastindex else match.group(0))
     return city
+
+
+def _truncate_excerpt(value: str, maximum: int = 200) -> str:
+    text = clean_text(value)
+    if len(text) <= maximum:
+        return text
+    prefix = text[:maximum]
+    if " " not in prefix:
+        return ""
+    return prefix.rsplit(" ", 1)[0].rstrip(" ,;:-")
+
+
+def excerpt_for_stop(name: str, passage: dict[str, Any], city: str) -> str:
+    """Return a short description for a stop from its supporting passage."""
+    for item in _passage_items(passage, 0, city):
+        if item["name"].casefold() == name.casefold():
+            return _truncate_excerpt(item["description"])
+    return _truncate_excerpt(str(passage.get("text") or ""))
 
 
 class FakeModel:
@@ -120,39 +149,42 @@ class FakeModel:
         days = int(self.request["days"])
         style = str(self.request.get("style", "relaxed"))
         slots = TIME_SLOTS.get(style, TIME_SLOTS["relaxed"])
-        stop_count = len(slots)
         start_date = self.request.get("start_date")
         start = date.fromisoformat(start_date) if start_date else None
+        items = _all_items(self.passages, city)
         day_rows = []
         stop_total = 0.0
+        item_cursor = 0
         for day_number in range(1, days + 1):
             stops = []
             for slot_index, time_slot in enumerate(slots):
-                if not self.passages:
+                if item_cursor >= len(items):
                     break
-                passage_index = ((day_number - 1) * stop_count + slot_index) % len(self.passages)
-                passage = self.passages[passage_index]
-                description = f"{passage.get('section', '')} {passage.get('text', '')}".casefold()
-                is_food = any(term in description for term in FOOD_TERMS)
+                item = items[item_cursor]
+                item_cursor += 1
+                passage = item["passage"]
+                passage_index = item["passage_index"]
+                description = item["description"]
+                context = f"{passage.get('section', '')} {item['name']} {description}".casefold()
+                is_food = any(term in context for term in FOOD_TERMS)
                 raw_cost = self.costs.get("meal_budget" if is_food else "typical_entry_fee_low")
                 cost = float(raw_cost) if raw_cost is not None else 0.0
                 stop_total += cost
-                passage_text = str(passage.get("text") or "")
                 outdoor: bool | None = None
-                if any(term in description for term in OUTDOOR_TERMS):
+                if any(term in context for term in OUTDOOR_TERMS):
                     outdoor = True
-                elif any(term in description for term in ("indoor", "museum", "gallery", "interior")):
+                elif any(term in context for term in ("indoor", "museum", "gallery", "interior")):
                     outdoor = False
                 stops.append({
-                    "name": _name_from_passage(passage, city),
-                    "area": _area_from_passage(passage_text, city),
+                    "name": item["name"],
+                    "area": _area_from_passage(description, city),
                     "time_slot": time_slot,
                     "duration_minutes": 60 if is_food else 90,
                     "est_cost_inr": cost,
                     "notes": "Offline sample based on the retrieved passage; verify current details.",
                     "outdoor": outdoor,
                     "passage_ids": [passage_index + 1],
-                    "passage_text": passage_text,
+                    "excerpt": _truncate_excerpt(description),
                 })
             day_date = (start + timedelta(days=day_number - 1)).isoformat() if start else None
             day_rows.append({"day": day_number, "date": day_date, "stops": stops, "weather_note": None})
