@@ -328,6 +328,11 @@ class FakeModel:
         city = str(self.request["destination"])
         days = int(self.request["days"])
         style = str(self.request.get("style", "relaxed"))
+        interests = [str(value).casefold() for value in self.request.get("interests", [])]
+        food_interest = any(
+            word in " ".join(interests)
+            for word in ("food", "eat", "restaurant", "cuisine", "dining")
+        )
         slots = TIME_SLOTS.get(style, TIME_SLOTS["relaxed"])
         start_date = self.request.get("start_date")
         start = date.fromisoformat(start_date) if start_date else None
@@ -342,11 +347,37 @@ class FakeModel:
             for item in fallback:
                 if not any(_names_overlap(item["name"], existing["name"]) for existing in items):
                     items.append(item)
+        food_items = [
+            item for item in items
+            if kind_from_section(item["passage"].get("section")) == "food"
+        ]
         items = items[:target_total]
         day_rows = []
         stop_total = 0.0
+        used_names: set[str] = set()
         for day_number in range(1, days + 1):
             day_items = items[day_number - 1::days]
+            day_items = [
+                item for item in day_items
+                if item["name"].casefold() not in used_names
+            ]
+            if food_interest and food_items:
+                food_item = next(
+                    (
+                        item for item in food_items
+                        if item["name"].casefold() not in used_names
+                    ),
+                    None,
+                )
+                if food_item is not None:
+                    day_items = [
+                        item for item in day_items
+                        if item["name"].casefold() != food_item["name"].casefold()
+                    ]
+                    if day_items:
+                        day_items[-1] = food_item
+                    else:
+                        day_items.append(food_item)
             stops = []
             for slot_index, item in enumerate(day_items):
                 time_slot = slots[slot_index]
@@ -354,10 +385,23 @@ class FakeModel:
                 passage_index = item["passage_index"]
                 description = item["description"]
                 kind = kind_from_section(passage.get("section"))
+                if kind == "food":
+                    time_slot = "evening"
                 context = f"{item['name']} {description}".casefold()
                 is_food = kind == "food"
-                raw_cost = self.costs.get("meal_budget" if is_food else "typical_entry_fee_low")
+                if kind == "food":
+                    raw_cost = self.costs.get("meal_budget")
+                elif kind == "activity":
+                    low = self.costs.get("typical_entry_fee_low")
+                    high = self.costs.get("typical_entry_fee_high")
+                    if low is not None and high is not None:
+                        raw_cost = (float(low) + float(high)) / 2
+                    else:
+                        raw_cost = low
+                else:
+                    raw_cost = self.costs.get("typical_entry_fee_low")
                 cost = float(raw_cost) if raw_cost is not None else 0.0
+                used_names.add(item["name"].casefold())
                 stop_total += cost
                 outdoor: bool | None = None
                 if any(term in context for term in OUTDOOR_TERMS):

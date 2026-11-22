@@ -26,7 +26,11 @@ PASSAGES = [
     {"text": "- Chapora — home of the Chapora fort with wide views across North Goa.\n- **Kitesurfing** &mdash; try this popular water activity near Morjim during a windy afternoon.\n- Vagator beach — a quiet beach with cafes and swimming spots in Bardez district.",
      "section": "Do", "source_name": "Goa Guide", "source_url": "https://example.test/activities"},
 ]
-COSTS = {"typical_entry_fee_low": 42, "meal_budget": 123}
+COSTS = {
+    "typical_entry_fee_low": 42,
+    "typical_entry_fee_high": 84,
+    "meal_budget": 123,
+}
 BANNED = {"if", "this", "the", "it", "you", "there", "once", "now", "indian", "southern", "beaches"}
 
 
@@ -40,16 +44,18 @@ def test_fake_plan_uses_unique_items_and_city_costs_for_each_style(style, expect
     result = json.loads(fake("Create a travel itinerary"))
 
     assert len(result["days"]) == 2
-    assert [len(day["stops"]) for day in result["days"]] == [expected_count, expected_count]
+    counts = [len(day["stops"]) for day in result["days"]]
+    assert counts == ([3, 2] if style == "relaxed" else [4, 3])
     stops = [stop for day in result["days"] for stop in day["stops"]]
     names = [stop["name"] for stop in stops]
     assert len(names) == len(set(name.casefold() for name in names))
-    assert len(names) == 6 if style == "relaxed" else len(names) == 8
+    assert len(names) == (5 if style == "relaxed" else 7)
     for day in result["days"]:
-        assert [stop["time_slot"] for stop in day["stops"]] == (
-            ["morning", "afternoon", "evening"] if style == "relaxed"
-            else ["morning", "afternoon", "evening", "evening"]
-        )
+        time_slots = [stop["time_slot"] for stop in day["stops"]]
+        assert time_slots[0] == "morning"
+        assert all(slot in {"morning", "afternoon", "evening"} for slot in time_slots)
+        food_stops = [stop for stop in day["stops"] if stop["kind"] == "food"]
+        assert all(stop["time_slot"] == "evening" for stop in food_stops)
     for stop in stops:
         assert 1 <= len(stop["name"].split()) <= 5
         assert not stop["name"][0].isdigit()
@@ -65,7 +71,14 @@ def test_fake_plan_uses_unique_items_and_city_costs_for_each_style(style, expect
             source_passage["section"].casefold()
         ]
         assert stop["kind"] == expected_kind
-        expected_cost = COSTS["meal_budget"] if expected_kind == "food" else COSTS["typical_entry_fee_low"]
+        if expected_kind == "food":
+            expected_cost = COSTS["meal_budget"]
+        elif expected_kind == "activity":
+            expected_cost = (
+                COSTS["typical_entry_fee_low"] + COSTS["typical_entry_fee_high"]
+            ) / 2
+        else:
+            expected_cost = COSTS["typical_entry_fee_low"]
         assert stop["est_cost_inr"] == expected_cost
         assert "Offline sample" in stop["notes"]
     assert next(stop for stop in stops if stop["name"] == "Baga Beach")["area"] == "North Goa"
@@ -275,3 +288,62 @@ def test_passage_items_skip_events_and_standalone_sports():
         "section": "Do",
     }, 0, "Jaipur")
     assert items == []
+
+
+def test_activity_cost_uses_midpoint_and_sight_cost_uses_low():
+    request = {
+        "destination": "Goa", "days": 1, "budget": 5000,
+        "interests": ["beach"], "style": "relaxed", "start_date": None,
+    }
+    fake = create_fake_model(request)
+    fake.set_passages([
+        {
+            "text": "- Kitesurfing — try this popular water activity near Morjim during a windy afternoon.",
+            "section": "Do", "source_name": "Guide", "source_url": "https://example.test",
+        },
+        {
+            "text": "- Fort Aguada — a historic fort with broad views across the coastline.",
+            "section": "See", "source_name": "Guide", "source_url": "https://example.test",
+        },
+    ])
+    fake.set_costs(COSTS)
+    stops = json.loads(fake("draft"))["days"][0]["stops"]
+    costs = {stop["kind"]: stop["est_cost_inr"] for stop in stops}
+    assert costs["activity"] == 63
+    assert costs["sight"] == 42
+
+
+@pytest.mark.parametrize("interest", ["food", "eat", "restaurant", "cuisine", "dining"])
+def test_food_interests_add_one_evening_food_stop_per_day(interest):
+    request = {
+        "destination": "Goa", "days": 2, "budget": 5000,
+        "interests": [interest], "style": "relaxed", "start_date": None,
+    }
+    fake = create_fake_model(request)
+    fake.set_passages([
+        {
+            "text": "- Panjim Cafe — serves breakfast and snacks at a popular cafe in Panjim each morning.",
+            "section": "Eat", "source_name": "Guide", "source_url": "https://example.test",
+        },
+        {
+            "text": "- Margao Market — serves local meals and snacks near shops and busy market lanes.",
+            "section": "Eat", "source_name": "Guide", "source_url": "https://example.test",
+        },
+        {
+            "text": "- Fort Aguada — a historic fort with broad views across the coastline.",
+            "section": "See", "source_name": "Guide", "source_url": "https://example.test",
+        },
+        {
+            "text": "- Baga Beach — a sandy beach with water sports and cafes along the coast.",
+            "section": "See", "source_name": "Guide", "source_url": "https://example.test",
+        },
+    ])
+    fake.set_costs(COSTS)
+    result = json.loads(fake("draft"))
+    all_stops = [stop for day in result["days"] for stop in day["stops"]]
+    assert len(all_stops) == len({stop["name"].casefold() for stop in all_stops})
+    assert all(
+        any(stop["kind"] == "food" and stop["time_slot"] == "evening"
+            for stop in day["stops"])
+        for day in result["days"]
+    )
