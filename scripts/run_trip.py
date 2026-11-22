@@ -51,6 +51,8 @@ def _print_result(
                     f"  {stop.get('time_slot', 'time unknown')}: {stop.get('name', 'Unnamed stop')} "
                     f"— {stop.get('area', 'area unknown')} — INR {float(stop.get('est_cost_inr') or 0):.0f} estimated"
                 )
+                if stop.get("kind"):
+                    output(f"    Kind: {stop['kind']}")
                 if stop.get("excerpt"):
                     output(f"    Excerpt: {stop['excerpt']}")
                 sources = stop.get("sources") or []

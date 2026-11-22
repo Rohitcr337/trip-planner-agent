@@ -74,6 +74,7 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     }
     stop = result["draft"]["days"][0]["stops"][0]
     assert stop["lat"] == 26.9124 and stop["lon"] == 75.7873
+    assert stop["kind"] == "sight"
     assert "passage_text" not in stop
     assert stop["excerpt"] == "a historic fort in Amer"
     assert result["checks"]

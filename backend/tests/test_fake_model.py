@@ -49,7 +49,12 @@ def test_fake_plan_uses_unique_items_and_city_costs_for_each_style(style, expect
         assert "&mdash;" not in stop["excerpt"] and "**" not in stop["excerpt"]
         source_passage = PASSAGES[stop["passage_ids"][0] - 1]
         assert source_passage["source_name"]
-        assert stop["est_cost_inr"] in {COSTS["meal_budget"], COSTS["typical_entry_fee_low"]}
+        expected_kind = {"see": "sight", "do": "activity", "eat": "food", "drink": "food"}[
+            source_passage["section"].casefold()
+        ]
+        assert stop["kind"] == expected_kind
+        expected_cost = COSTS["meal_budget"] if expected_kind == "food" else COSTS["typical_entry_fee_low"]
+        assert stop["est_cost_inr"] == expected_cost
         assert "Offline sample" in stop["notes"]
     assert next(stop for stop in stops if stop["name"] == "Baga Beach")["area"] == "North Goa"
     assert next(stop for stop in stops if stop["name"] == "Fort Aguada")["area"] == "Bardez"

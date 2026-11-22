@@ -16,7 +16,7 @@ from backend.app.checks import run_checks
 from backend.app.costs import load_costs
 from backend.app.fake_model import excerpt_for_stop
 from backend.app.graph.state import TripState
-from backend.app.itinerary import Itinerary, Source, build_draft_prompt
+from backend.app.itinerary import Itinerary, Source, build_draft_prompt, kind_from_section
 from backend.app.llm import ask
 from backend.app.retrieve import retrieve
 from backend.app.schemas import TripRequest
@@ -287,6 +287,10 @@ def _parse_and_validate_draft(raw: str, state: TripState) -> dict:
             for passage_id in valid_ids
         ]
         stop.unverified = not stop.sources
+        stop.kind = (
+            kind_from_section(passages[valid_ids[0] - 1].get("section"))
+            if valid_ids else None
+        )
         stop.excerpt = (
             excerpt_for_stop(stop.name, passages[valid_ids[0] - 1], itinerary.city)
             if valid_ids else ""

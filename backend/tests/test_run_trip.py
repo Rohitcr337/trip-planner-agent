@@ -63,6 +63,7 @@ def test_offline_run_uses_retrieved_stops_and_makes_no_model_or_http_calls():
         result = run_trip(args, output=lines.append)
 
     assert result["draft"]["days"][0]["stops"][0]["name"] == "Amber Fort"
+    assert result["draft"]["days"][0]["stops"][0]["kind"] == "sight"
     assert result["draft"]["days"][0]["stops"][0]["sources"][0]["source_name"] == "Jaipur Guide"
     stops = [stop for day in result["draft"]["days"] for stop in day["stops"]]
     assert all(stop["sources"] for stop in stops)
@@ -75,6 +76,7 @@ def test_offline_run_uses_retrieved_stops_and_makes_no_model_or_http_calls():
     assert any("Real model calls: 0" in line for line in lines)
     assert any("PASS budget" in line for line in lines)
     assert any(line.startswith("    Excerpt:") for line in lines)
+    assert "    Kind: sight" in lines
 
 
 def test_offline_fake_also_handles_revision_prompts():
@@ -90,4 +92,5 @@ def test_offline_fake_also_handles_revision_prompts():
         result = run_trip(args, output=lambda line: None)
     assert result["revisions"] == 3
     assert result["draft"]["days"][0]["stops"][0]["name"] == "Amber Fort"
+    assert result["draft"]["days"][0]["stops"][0]["kind"] == "sight"
     assert result["unresolved"]

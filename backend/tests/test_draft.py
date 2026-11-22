@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from backend.app.graph.nodes import draft_node
 from backend.app.itinerary import build_draft_prompt
-from backend.app.itinerary import MAX_PROMPT_PASSAGE_CHARS
+from backend.app.itinerary import MAX_PROMPT_PASSAGE_CHARS, kind_from_section
 
 
 def _state(**overrides):
@@ -61,6 +61,7 @@ def _draft_json(passage_ids=None):
                             "est_cost_inr": 500,
                             "notes": "Check current details.",
                             "outdoor": True,
+                            "kind": "food",
                             "passage_ids": passage_ids if passage_ids is not None else [1],
                             "passage_text": "whole passage must not be returned",
                             "excerpt": "model output is replaced by passage evidence",
@@ -90,6 +91,7 @@ def test_draft_node_validates_and_fills_sources():
     ]
     assert stop["unverified"] is False
     assert stop["outdoor"] is True
+    assert stop["kind"] == "sight"
     assert stop["excerpt"] == "Amber Fort is a historic fort."
     assert "passage_text" not in stop
 
@@ -146,6 +148,7 @@ def test_prompt_contains_request_passages_costs_and_feedback():
     assert "reduce the cost" in prompt
     assert "Previous draft" in prompt
     assert "true if the stop is mostly outdoors" in prompt
+    assert "kind to sight, activity, food, or null" in prompt
 
 
 def test_prompt_cleans_guide_text_without_changing_passages():
@@ -167,6 +170,14 @@ def test_prompt_reports_unavailable_weather_without_inventing_it():
 
     assert "Weather unavailable: No start date provided." in prompt
     assert "sunny" not in prompt.lower()
+
+
+def test_stop_kind_maps_supported_sections_and_leaves_other_sections_unknown():
+    assert kind_from_section("See") == "sight"
+    assert kind_from_section("DO") == "activity"
+    assert kind_from_section("Eat") == "food"
+    assert kind_from_section("Drink") == "food"
+    assert kind_from_section("Overview") is None
 
 
 def test_prompt_drops_lowest_ranked_passages_to_respect_character_limit():

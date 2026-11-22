@@ -7,16 +7,13 @@ from datetime import date, timedelta
 from typing import Any
 
 from backend.app.text import clean_text
+from backend.app.itinerary import kind_from_section
 
 
 TIME_SLOTS = {
     "relaxed": ("morning", "afternoon", "evening"),
     "packed": ("morning", "afternoon", "evening", "evening"),
 }
-FOOD_TERMS = (
-    "food", "restaurant", "cafe", "café", "cuisine", "meal", "eatery",
-    "dining", "breakfast", "lunch", "dinner", "snack", "dish", "street food",
-)
 OUTDOOR_TERMS = ("beach", "fort", "garden", "hill", "waterfall", "park", "lake", "outdoor")
 BANNED_NAME_STARTS = {
     "a", "an", "and", "as", "at", "but", "by", "famous", "for", "from",
@@ -207,8 +204,9 @@ class FakeModel:
                 passage = item["passage"]
                 passage_index = item["passage_index"]
                 description = item["description"]
-                context = f"{passage.get('section', '')} {item['name']} {description}".casefold()
-                is_food = any(term in context for term in FOOD_TERMS)
+                kind = kind_from_section(passage.get("section"))
+                context = f"{item['name']} {description}".casefold()
+                is_food = kind == "food"
                 raw_cost = self.costs.get("meal_budget" if is_food else "typical_entry_fee_low")
                 cost = float(raw_cost) if raw_cost is not None else 0.0
                 stop_total += cost
@@ -227,6 +225,7 @@ class FakeModel:
                     "outdoor": outdoor,
                     "passage_ids": [passage_index + 1],
                     "excerpt": _truncate_excerpt(description),
+                    "kind": kind,
                 })
             day_date = (start + timedelta(days=day_number - 1)).isoformat() if start else None
             day_rows.append({"day": day_number, "date": day_date, "stops": stops, "weather_note": None})

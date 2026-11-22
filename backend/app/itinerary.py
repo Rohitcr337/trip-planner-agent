@@ -12,6 +12,12 @@ from backend.app.graph.state import TripState
 from backend.app.text import clean_text
 
 MAX_PROMPT_PASSAGE_CHARS = 6000
+STOP_KINDS = {"see": "sight", "do": "activity", "eat": "food", "drink": "food"}
+
+
+def kind_from_section(section: str | None) -> str | None:
+    heading = clean_text(str(section or "").split(" > ")[-1]).casefold()
+    return STOP_KINDS.get(heading)
 
 
 class Source(BaseModel):
@@ -32,6 +38,7 @@ class Stop(BaseModel):
     lon: float | None = None
     passage_ids: list[int]
     excerpt: str = ""
+    kind: Literal["sight", "activity", "food"] | None = None
     sources: list[Source] = Field(default_factory=list)
     unverified: bool = False
 
@@ -100,6 +107,7 @@ Rules:
 - Output JSON only and nothing else.
 - Plan exactly the requested number of days.
 - Every stop must list in passage_ids the numbers of the passages that support it, or [] if none do.
+- For each stop, set kind to sight, activity, food, or null, based on the section of its cited passage.
 - Do not include passage_text or copy full passages into a stop; include only a short excerpt when useful.
 - For each stop, set outdoor to true if the stop is mostly outdoors, otherwise false; use null if unknown.
 - Do not invent facts, prices, or opening hours; put uncertainty in notes.
