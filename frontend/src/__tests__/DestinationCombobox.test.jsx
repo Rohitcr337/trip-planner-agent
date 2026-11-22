@@ -44,6 +44,16 @@ it("supports keyboard navigation, selection and Escape", () => {
   expect(input.getAttribute("aria-activedescendant")).toBeNull();
 });
 
+it("starts ArrowUp at the last option and wraps through the list", () => {
+  render(<Harness />);
+  const input = screen.getByRole("combobox");
+  fireEvent.focus(input);
+  fireEvent.keyDown(input, { key: "ArrowUp" });
+  expect(document.getElementById(input.getAttribute("aria-activedescendant")).textContent).toBe("Goa");
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  expect(document.getElementById(input.getAttribute("aria-activedescendant")).textContent).toBe("Jaipur");
+});
+
 it("filters typed text and offers available options when nothing matches", () => {
   const onSelect = vi.fn();
   render(<Harness onSelect={onSelect} />);

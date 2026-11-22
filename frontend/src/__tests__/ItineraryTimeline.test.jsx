@@ -21,6 +21,19 @@ describe("ItineraryTimeline", () => {
     expect(screen.getByRole("heading", { name: "Planning assumptions" })).toBeTruthy();
   });
 
+  it("numbers stops and renders only the short excerpt, not full source passages", () => {
+    const excerpt = "A short description of the fort.";
+    const detailed = { ...stop, excerpt, kind: "sight", passage_text: "This full passage must never be rendered." };
+    const { rerender } = render(<ItineraryTimeline draft={{ ...draft, days: [{ ...draft.days[0], stops: [detailed] }] }} status="complete" />);
+    expect(screen.getByLabelText("Stop 1").textContent).toBe("1");
+    expect(screen.getByText(excerpt)).toBeTruthy();
+    expect(screen.getByText("sight")).toBeTruthy();
+    expect(screen.queryByText(detailed.passage_text)).toBeNull();
+    rerender(<ItineraryTimeline draft={{ ...draft, days: [{ ...draft.days[0], stops: [{ ...detailed, excerpt: "A".repeat(200) + " hidden tail" }] }] }} status="complete" />);
+    expect(screen.getByText("A".repeat(200))).toBeTruthy();
+    expect(screen.queryByText(/hidden tail/)).toBeNull();
+  });
+
   it("shows the unverified badge only on the unverified stop", () => {
     render(<ItineraryTimeline draft={draft} status="complete" />);
     expect(within(screen.getByRole("article", { name: "Guide passage" })).getByText("Unverified")).toBeTruthy();

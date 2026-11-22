@@ -97,7 +97,9 @@ export default function ItineraryTimeline({ draft = null, costsAreEstimates = fa
                     <span aria-hidden="true" className="absolute top-6 -left-[21px] size-2 rounded-pill bg-accent sm:-left-[29px]" />
                     <article aria-labelledby={`day-${day.day}-stop-${index}-heading`} className="min-w-0 rounded-control border border-border p-4">
                       <div className="flex flex-wrap items-center gap-2">
+                        <span aria-label={`Stop ${index + 1}`} className="inline-flex size-6 items-center justify-center rounded-pill bg-primary-soft text-caption font-semibold text-primary">{index + 1}</span>
                         <span className="rounded-pill bg-surface-muted px-3 py-1 text-caption text-text-muted">{SLOTS[stop.time_slot]}</span>
+                        {stop.kind && <span className="text-caption capitalize text-text-muted">{stop.kind}</span>}
                         {stop.unverified && <UnverifiedBadge />}
                       </div>
                       <h4 id={`day-${day.day}-stop-${index}-heading`} className="mt-3 break-words text-large text-text">{stop.name}</h4>
@@ -106,6 +108,7 @@ export default function ItineraryTimeline({ draft = null, costsAreEstimates = fa
                         <div className="inline-flex items-center gap-1.5"><dt className="sr-only">Duration</dt><Clock aria-hidden="true" className="size-4" /><dd>{stop.duration_minutes} min</dd></div>
                         <div className="rounded-pill bg-primary-soft px-3 py-1 text-text"><dt className="sr-only">Estimated cost</dt><dd>{formatInr(stop.est_cost_inr)} est.</dd></div>
                       </dl>
+                      {stop.excerpt && <p className="mt-3 max-w-prose break-words text-small text-text">{stop.excerpt.slice(0, 200)}</p>}
                       {stop.notes && <p className="mt-3 max-w-prose break-words text-small text-text-muted">{stop.notes}</p>}
                       <div className="mt-4 flex flex-wrap gap-2">
                         {stop.sources.map((source, sourceIndex) => <SourceBadge key={sourceIndex} source={source} />)}

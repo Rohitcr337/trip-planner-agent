@@ -9,6 +9,8 @@ import ErrorAlert from "./components/ErrorAlert.jsx";
 import ProgressSteps from "./components/ProgressSteps.jsx";
 import ItineraryTimeline from "./components/ItineraryTimeline.jsx";
 import CostSummary from "./components/CostSummary.jsx";
+import MapView from "./components/MapView.jsx";
+import ChecksPanel from "./components/ChecksPanel.jsx";
 
 const HOME_PATHS = new Set(["/", "/index.html"]);
 
@@ -72,7 +74,13 @@ function Planner() {
               <ErrorAlert title="Your plan could not be completed" message={plan.message} onRetry={() => startPlan(plan.request)} />
             ) : (
               <>
-                <CostSummary estimate={plan.result?.draft?.total_est_cost_inr ?? null} budget={plan.request?.budget ?? null} loading={plan.status === "planning"} />
+                <CostSummary breakdown={plan.result?.cost_breakdown ?? null} loading={plan.status === "planning"} />
+                {plan.result && (
+                  <>
+                    <MapView key={plan.result.draft?.city} draft={plan.result.draft} cityCenter={plan.result.city_center} />
+                    <ChecksPanel checks={plan.result.checks} revisions={plan.result.revisions} />
+                  </>
+                )}
                 <ItineraryTimeline draft={plan.result?.draft ?? null} costsAreEstimates={plan.result?.costs_are_estimates === true} unresolved={plan.result?.unresolved ?? []} status={plan.status} />
               </>
             )}

@@ -6,7 +6,7 @@ import { fetchOptions, streamPlan } from "../api.js";
 vi.mock("../api.js", () => ({ fetchOptions: vi.fn(), streamPlan: vi.fn() }));
 const options = { cities: ["Jaipur", "Chennai", "Goa"], destinations: [{ name: "Jaipur", lat: 26.9, lon: 75.8 }, { name: "Chennai", lat: 13.1, lon: 80.3 }, { name: "Goa", lat: 15.5, lon: 73.8 }], styles: ["relaxed", "packed"], day_range: { min: 1, max: 7 }, interest_suggestions: ["history", "food"] };
 const draft = { city: "Jaipur", days: [{ day: 1, date: null, weather_note: null, stops: [{ name: "Amber Fort", area: "Amer", time_slot: "morning", duration_minutes: 90, est_cost_inr: 500, notes: "Verify details.", sources: [], unverified: true }] }], total_est_cost_inr: 500, assumptions: [] };
-const result = { draft, checks: [], revisions: 0, unresolved: [], costs_are_estimates: true, demo: true };
+const result = { draft, city_center: { lat: 26.9124, lon: 75.7873 }, cost_breakdown: { stops_inr: 500, transport_meals_inr: 1000, stay_inr: 1000, estimate_inr: 2500, budget_inr: 10000, complete: true }, checks: [], revisions: 0, unresolved: [], costs_are_estimates: true, demo: true };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -57,6 +57,10 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "Amber Fort" })).toBeTruthy();
     expect(screen.getByText("Costs are estimates.")).toBeTruthy();
     expect(screen.getByText("Within budget")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Your Jaipur itinerary" })).toBeTruthy();
+    expect(screen.getByText(/Rs 2,500/)).toBeTruthy();
+    expect(screen.getByText("Revisions: 0")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Map for day 1" })).toBeTruthy();
     expect(document.querySelectorAll("h1")).toHaveLength(1);
   });
 

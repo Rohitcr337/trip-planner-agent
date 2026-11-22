@@ -44,7 +44,7 @@ export default function DestinationCombobox({ id, names, value, onChange, invali
         setActive(step === 1 ? 0 : shown.length - 1);
         return;
       }
-      setActive((current) => (current + step + shown.length) % shown.length);
+      setActive((current) => current < 0 ? (step === 1 ? 0 : shown.length - 1) : (current + step + shown.length) % shown.length);
     } else if (event.key === "Enter" && open && activeId) {
       event.preventDefault();
       choose(shown[active]);
