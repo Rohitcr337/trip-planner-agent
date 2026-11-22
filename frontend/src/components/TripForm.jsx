@@ -306,7 +306,6 @@ export default function TripForm({ onSubmit, planning = false }) {
               inputMode="decimal"
               min="0"
               step="any"
-              placeholder="15000"
               value={values.budget}
               onChange={(event) => update("budget", event.target.value)}
               aria-invalid={Boolean(visibleErrors.budget)}

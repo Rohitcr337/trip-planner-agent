@@ -62,7 +62,7 @@ export default function ItineraryTimeline({ draft = null, costsAreEstimates = fa
           <EmptyIllustration />
           <p className="mt-4 text-large">{status === "complete" ? "No itinerary was drafted" : "Your next trip starts here"}</p>
           <p className="mt-2 max-w-prose text-text-muted">
-            {status === "complete" ? "The planner finished without a day-by-day draft. Review the issues below and try different trip details." : "Choose your city, pace and interests. Your days, stop estimates and guide sources will appear here."}
+            {status === "complete" ? "The planner finished without a day-by-day draft. Review the issues below and try different trip details." : "Choose a destination, pace and interests. Your days, estimated costs and guide sources will appear here."}
           </p>
         </div>
         <UnresolvedIssues issues={unresolved} />

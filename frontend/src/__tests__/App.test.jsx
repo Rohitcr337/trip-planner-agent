@@ -38,21 +38,22 @@ describe("App", () => {
     expect(streamPlan.mock.calls[1][0]).toEqual(streamPlan.mock.calls[0][0]);
   });
 
-  it("uses the real result fields and shows the demo banner only when demo is true", async () => {
+  it("uses the real result fields and shows the preview chip only when demo is true", async () => {
     streamPlan.mockImplementation(async (_request, onEvent) => {
       onEvent({ type: "step", data: { name: "intake", message: "Trip details validated.", elapsed_seconds: 0.1 } });
       onEvent({ type: "result", data: result });
     });
     render(<App />);
+    expect(screen.queryByText("Preview · sample data")).toBeNull();
     await fillAndSubmit();
-    expect(await screen.findByText("Sample plan (demo)")).toBeTruthy();
+    expect(await screen.findByText("Preview · sample data")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Amber Fort" })).toBeTruthy();
     expect(screen.getByText("Costs are estimates.")).toBeTruthy();
     expect(screen.getByText("Within budget")).toBeTruthy();
     expect(document.querySelectorAll("h1")).toHaveLength(1);
   });
 
-  it("shows planning skeletons and does not show a demo banner for a non-demo result", async () => {
+  it("shows planning skeletons and does not show the preview chip for a live result", async () => {
     let finish;
     streamPlan.mockImplementation((_request, onEvent) => new Promise((resolve) => {
       finish = () => { onEvent({ type: "result", data: { ...result, demo: false } }); resolve({ ok: true }); };
@@ -63,6 +64,6 @@ describe("App", () => {
     expect(screen.getByLabelText("Loading itinerary")).toBeTruthy();
     await act(async () => finish());
     await waitFor(() => expect(screen.getByRole("heading", { name: "Amber Fort" })).toBeTruthy());
-    expect(screen.queryByText("Sample plan (demo)")).toBeNull();
+    expect(screen.queryByText("Preview · sample data")).toBeNull();
   });
 });
