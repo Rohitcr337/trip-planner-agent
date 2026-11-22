@@ -23,9 +23,35 @@ BANNED_NAME_STARTS = {
     "here", "if", "in", "indian", "it", "local", "many", "most", "now",
     "of", "once", "one", "our", "people", "several", "some", "southern",
     "northern", "eastern", "western", "the", "there", "they", "this", "visitors",
-    "we", "you", "beaches",
+    "we", "you", "beaches", "tamil", "hindi", "marathi", "formerly",
+    "january", "february", "march", "april", "may", "june", "july",
+    "august", "september", "october", "november", "december", "christianity",
+    "catholic", "hindu", "india", "rajasthan", "thomas",
 }
+_NAME_TRAILING_WORDS = {"and", "&", "of", "the", "in", "at", "to", "or", "for", "from"}
 _LIST_ITEM = re.compile(r"(?:^|\s)-\s+")
+_BOLD = re.compile(r"\*\*(.+?)\*\*|__(.+?)__")
+_PLACE_SUFFIX = re.compile(
+    r"\b((?:[A-Z][A-Za-z’'-]*|and|of|the|&)(?:\s+(?:[A-Z][A-Za-z’'-]*|and|of|the|&)){0,3}\s+"
+    r"(?i:Fort|Lake|Temple|Palace|Beach|Market|Bazaar|Bazaars|Museum|Hill|Hills|Island|"
+    r"Garden|Sanctuary|Falls|Waterfall|Church|Cathedral|Square|Street|Park|Village|Mall|Malls|"
+    r"Chicken|Curry|Dosa|Thali|Biryani|Dhani))\b"
+)
+_CONTEXT_PLACE = re.compile(
+    r"\b(?:in|near|at|to)\s+"
+    r"((?:[A-Z][A-Za-z’'-]*|and|&)(?:\s+(?:[A-Z][A-Za-z’'-]*|and|&|of|the)){0,3})"
+)
+_FALLBACK_TOPICS = {
+    "understand": "Guide Overview",
+    "overview": "Guide Overview",
+    "eat": "Dining",
+    "drink": "Drinks",
+    "sleep": "Accommodation",
+    "buy": "Shopping",
+    "do": "Activities",
+    "see": "Sights",
+    "beaches": "Beaches",
+}
 _DISTRICT_PATTERNS = (
     re.compile(r"\b(?:North|South)\s+Goa\b", re.IGNORECASE),
     re.compile(r"\bBardez\b", re.IGNORECASE),
@@ -40,24 +66,65 @@ def _valid_name(value: str, city: str) -> str | None:
     name = clean_text(value).strip(" \t\r\n:;,.—–-_'\"()[]{}")
     name = re.sub(r"\s*\([^)]*\)\s*$", "", name).strip()
     words = name.split()
+    while len(words) > 1 and words[0].casefold() in {"a", "an", "the", "at", "in"}:
+        words.pop(0)
+    name = " ".join(words)
+    words = name.split()
     if not 1 <= len(words) <= 5 or name.casefold() == city.casefold():
         return None
     first = re.sub(r"[^A-Za-z]+$", "", words[0]).casefold()
-    if not first or first[0].isdigit() or first in BANNED_NAME_STARTS:
+    if (not first or first[0].isdigit() or first in BANNED_NAME_STARTS
+            or words[-1].casefold().strip(".,;:") in _NAME_TRAILING_WORDS
+            or not words[0][0].isupper()):
         return None
     return name
 
 
 def _fallback_name(section: str, city: str) -> str:
     heading = clean_text(section.split(" > ")[-1]).strip(" .:-")
+    heading = _FALLBACK_TOPICS.get(heading.casefold(), heading)
     words = heading.split()
-    while words and words[0].casefold() in BANNED_NAME_STARTS:
+    while words and words[0].casefold() in {"a", "an", "the"}:
         words.pop(0)
     if not words:
         words = ["Guide"]
     if " ".join(words).casefold() == city.casefold():
         words = ["Guide"]
-    return " ".join([*words[:4], city])
+    return " ".join([city, *words[:4]])
+
+
+def _fallback_candidates(text: str, city: str, passage_index: int, passage: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = str(passage.get("text") or "")
+    found: list[tuple[int, str]] = []
+    for match in _BOLD.finditer(raw):
+        value = next(group for group in match.groups() if group is not None)
+        name = _valid_name(value, city)
+        if name:
+            found.append((match.start(), name))
+    for match in _PLACE_SUFFIX.finditer(text):
+        name = _valid_name(match.group(1), city)
+        if name:
+            found.append((match.start(), name))
+    for match in _CONTEXT_PLACE.finditer(text):
+        name = _valid_name(match.group(1), city)
+        if name and _area_from_passage(name, city) == city:
+            found.append((match.start(), name))
+
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    for _, name in sorted(found, key=lambda item: item[0]):
+        if name.casefold() in seen:
+            continue
+        sentence = next((part for part in sentences if name.casefold() in part.casefold()), text)
+        items.append({
+            "name": name,
+            "description": _truncate_excerpt(sentence),
+            "passage_index": passage_index,
+            "passage": passage,
+        })
+        seen.add(name.casefold())
+    return items
 
 
 def _passage_items(passage: dict[str, Any], passage_index: int, city: str) -> list[dict[str, Any]]:
@@ -76,6 +143,8 @@ def _passage_items(passage: dict[str, Any], passage_index: int, city: str) -> li
                 "passage_index": passage_index,
                 "passage": passage,
             })
+    if not items:
+        items = _fallback_candidates(text, city, passage_index, passage)
     if not items:
         items.append({
             "name": _fallback_name(str(passage.get("section") or "Guide passage"), city),

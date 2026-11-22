@@ -26,7 +26,8 @@ DRAFT = json.dumps({
     "days": [{"day": 1, "date": None, "weather_note": None, "stops": [{
         "name": "Amber Fort", "area": "Amer", "time_slot": "morning",
         "duration_minutes": 90, "est_cost_inr": 10, "notes": "Check current details.",
-        "outdoor": False, "passage_ids": [1],
+        "outdoor": False, "passage_ids": [1], "passage_text": "whole passage from model",
+        "excerpt": "model-supplied text",
     }]}],
 })
 

@@ -1,7 +1,7 @@
 import json
 import pytest
 
-from backend.app.fake_model import create_fake_model
+from backend.app.fake_model import _passage_items, create_fake_model
 
 
 PASSAGES = [
@@ -58,12 +58,12 @@ def test_fake_plan_uses_unique_items_and_city_costs_for_each_style(style, expect
 def test_invalid_or_fragment_items_use_section_heading_fallback():
     fake = create_fake_model({"destination": "Goa", "days": 1, "style": "relaxed"})
     fake.set_passages([{
-        "text": "- Indian — phrase fragment. - Southern — another fragment. - 1. Beaches Goa — heading fragment.",
+        "text": "- Indian &mdash; phrase fragment. - Southern &mdash; another fragment. - 1. Beaches Goa &mdash; heading fragment.",
         "section": "Beaches", "source_name": "Guide", "source_url": "https://example.test",
     }])
     result = json.loads(fake("draft"))
     stop = result["days"][0]["stops"][0]
-    assert stop["name"] == "Guide Goa"
+    assert stop["name"] == "Goa Beaches"
     assert len(stop["name"].split()) <= 5
 
 
@@ -77,6 +77,15 @@ def test_fake_model_produces_fewer_stops_instead_of_repeating_items():
     assert [len(day["stops"]) for day in result["days"]] == [2, 0]
     names = [stop["name"] for day in result["days"] for stop in day["stops"]]
     assert len(names) == len(set(names))
+
+
+def test_unstructured_passage_uses_a_place_name_from_its_text():
+    passage = {
+        "text": "Maharaja Ram Singh also built the Ramgarh Lake to supply water to the city.",
+        "section": "Understand", "source_name": "Guide", "source_url": "https://example.test",
+    }
+    items = _passage_items(passage, 0, "Jaipur")
+    assert items[0]["name"] == "Ramgarh Lake"
 
 
 def test_fake_model_handles_intake_prompt():
