@@ -9,6 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from backend.app.graph.state import TripState
+from backend.app.text import clean_text
 
 
 class Source(BaseModel):
@@ -59,7 +60,7 @@ def build_draft_prompt(
     costs = live_data.get("costs", {})
 
     passage_text = "\n".join(
-        f"{index}. {passage.get('text', '')}\n"
+        f"{index}. {clean_text(passage.get('text', ''))}\n"
         f"   Section: {passage.get('section', '')}"
         for index, passage in enumerate(passages, start=1)
     ) or "(No retrieved passages.)"

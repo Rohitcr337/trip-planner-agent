@@ -143,6 +143,20 @@ def test_prompt_contains_request_passages_costs_and_feedback():
     assert "true if the stop is mostly outdoors" in prompt
 
 
+def test_prompt_cleans_guide_text_without_changing_passages():
+    state = _state(passages=[{
+        "text": "1. **Chapora** &mdash; near _North Goa_.\n\nSee &nbsp; the fort.",
+        "section": "Beaches",
+        "source_name": "Guide",
+        "source_url": "https://example.test/guide",
+    }])
+    prompt = build_draft_prompt(state)
+    assert "1. Chapora — near North Goa. See the fort." in prompt
+    assert "&mdash;" not in prompt and "&nbsp;" not in prompt
+    assert "**" not in prompt and "_North Goa_" not in prompt
+    assert state["passages"][0]["text"].startswith("1. **Chapora**")
+
+
 def test_prompt_reports_unavailable_weather_without_inventing_it():
     prompt = build_draft_prompt(_state())
 
