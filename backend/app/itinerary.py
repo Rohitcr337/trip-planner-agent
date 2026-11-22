@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 from backend.app.graph.state import TripState
 from backend.app.text import clean_text
 
+MAX_PROMPT_PASSAGE_CHARS = 6000
+
 
 class Source(BaseModel):
     source_name: str
@@ -59,10 +61,14 @@ def build_draft_prompt(
     weather = live_data.get("weather")
     costs = live_data.get("costs", {})
 
+    selected_passages = [
+        (passage, clean_text(passage.get("text", ""))) for passage in passages
+    ]
+    while sum(len(text) for _, text in selected_passages) > MAX_PROMPT_PASSAGE_CHARS:
+        selected_passages.pop()
     passage_text = "\n".join(
-        f"{index}. {clean_text(passage.get('text', ''))}\n"
-        f"   Section: {passage.get('section', '')}"
-        for index, passage in enumerate(passages, start=1)
+        f"{index}. {text}\n   Section: {passage.get('section', '')}"
+        for index, (passage, text) in enumerate(selected_passages, start=1)
     ) or "(No retrieved passages.)"
 
     if weather and weather.get("available"):

@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from backend.app.graph.nodes import draft_node
 from backend.app.itinerary import build_draft_prompt
+from backend.app.itinerary import MAX_PROMPT_PASSAGE_CHARS
 
 
 def _state(**overrides):
@@ -166,3 +167,18 @@ def test_prompt_reports_unavailable_weather_without_inventing_it():
 
     assert "Weather unavailable: No start date provided." in prompt
     assert "sunny" not in prompt.lower()
+
+
+def test_prompt_drops_lowest_ranked_passages_to_respect_character_limit():
+    passages = [
+        {"text": f"{index}" + ("x" * 2499), "section": "See"}
+        for index in range(1, 4)
+    ]
+    prompt = build_draft_prompt(_state(passages=passages))
+    included = [f"{index}" + ("x" * 2499) in prompt for index in range(1, 4)]
+    assert included == [True, True, False]
+    passage_block = prompt.split("Retrieved passages:\n", 1)[1].split(
+        "\n\nWeather summary:", 1
+    )[0]
+    text_lines = [line for line in passage_block.splitlines() if line.startswith(("1. ", "2. ", "3. "))]
+    assert sum(len(line[3:]) for line in text_lines) <= MAX_PROMPT_PASSAGE_CHARS

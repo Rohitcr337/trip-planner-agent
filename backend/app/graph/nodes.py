@@ -23,6 +23,7 @@ from backend.app.schemas import TripRequest
 from backend.app.tools import geocode, get_weather
 
 logger = logging.getLogger(__name__)
+DRAFT_PASSAGE_K = 8
 
 
 def _call_model(prompt: str, state: TripState) -> str:
@@ -133,7 +134,24 @@ def retrieve_node(state: TripState) -> TripState:
     destination = request["destination"]
     interests = request.get("interests", [])
     query = " ".join([destination, *interests])
-    passages = retrieve(destination, query)
+    queries = [query, *interests]
+    ranked = []
+    for query_index, retrieval_query in enumerate(queries):
+        for rank, passage in enumerate(
+            retrieve(destination, retrieval_query, k=DRAFT_PASSAGE_K), start=1
+        ):
+            ranked.append((rank, query_index, passage))
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    passages = []
+    seen = set()
+    for _, _, passage in ranked:
+        key = (
+            passage.get("source_name"), passage.get("source_url"),
+            passage.get("section"), passage.get("text"),
+        )
+        if key not in seen:
+            seen.add(key)
+            passages.append(passage)
     fake_model = state.get("fake_model")
     if fake_model is not None:
         fake_model.set_passages(passages)
