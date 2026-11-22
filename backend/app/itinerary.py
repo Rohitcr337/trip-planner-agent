@@ -25,6 +25,8 @@ class Stop(BaseModel):
     est_cost_inr: float = Field(ge=0)
     notes: str
     outdoor: bool | None = None
+    lat: float | None = None
+    lon: float | None = None
     passage_ids: list[int]
     passage_text: str | None = None
     sources: list[Source] = Field(default_factory=list)

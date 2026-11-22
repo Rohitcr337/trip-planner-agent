@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import NamedTuple, Any
 
-from backend.app.tools import get_distance, geocode
+from backend.app.tools import get_distance
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,6 @@ def check_logistics(draft: dict, request: dict, live_data: dict) -> CheckResult:
     weather_by_date = {day.get("date"): day for day in weather_days if day.get("date")}
     weather_has_dates = bool(weather_by_date)
     any_measured = False
-    city = request.get("destination", draft.get("city", ""))
     for day_index, day in enumerate(_days(draft), 1):
         number = day.get("day", day_index)
         stops = day.get("stops", [])
@@ -85,7 +84,8 @@ def check_logistics(draft: dict, request: dict, live_data: dict) -> CheckResult:
         prior_name = None
         for stop in stops:
             name = str(stop.get("name", "unnamed stop"))
-            point = geocode(name, city)
+            lat, lon = stop.get("lat"), stop.get("lon")
+            point = (lat, lon) if lat is not None and lon is not None else None
             if point is None:
                 prior_point = None
                 prior_name = name

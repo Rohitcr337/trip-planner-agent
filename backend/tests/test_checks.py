@@ -45,21 +45,22 @@ def test_logistics_rain_outdoor_and_weather_unavailable():
     d = draft()
     d["days"][0]["stops"][0]["outdoor"] = True
     live = {"weather": {"available": True, "days": [{"date": "2026-11-22", "rainy": True}]}}
-    with patch("backend.app.checks.geocode", return_value=None):
-        result = check_logistics(d, REQUEST, live)
+    result = check_logistics(d, REQUEST, live)
     assert "travel times not checked" in result.reason
     assert "rainy day" in result.reason
     d["days"][0]["stops"][0]["outdoor"] = False
-    with patch("backend.app.checks.geocode", return_value=None):
-        assert "rainy day" not in check_logistics(d, REQUEST, live).reason
-        assert "rain not checked" in check_logistics(d, REQUEST, {}).reason
+    assert "rainy day" not in check_logistics(d, REQUEST, live).reason
+    assert "rain not checked" in check_logistics(d, REQUEST, {}).reason
 
 
 def test_logistics_leg_day_and_active_limits_and_ungeocodable_stop():
-    stops = [{"name": name, "duration_minutes": 250, "outdoor": None} for name in "ABC"]
+    stops = [
+        {"name": "A", "duration_minutes": 250, "outdoor": None, "lat": None, "lon": None},
+        {"name": "B", "duration_minutes": 250, "outdoor": None, "lat": 1, "lon": 1},
+        {"name": "C", "duration_minutes": 250, "outdoor": None, "lat": 1, "lon": 2},
+    ]
     d = draft(stops)
-    with patch("backend.app.checks.geocode", side_effect=[None, (1, 1), (1, 2)]), \
-         patch("backend.app.checks.get_distance", return_value={"minutes": 75}):
+    with patch("backend.app.checks.get_distance", return_value={"minutes": 75}):
         result = check_logistics(d, REQUEST, {"weather": {"available": True, "days": []}})
     assert "75 minutes" in result.reason
     assert "travel times not checked" not in result.reason
@@ -69,11 +70,22 @@ def test_logistics_leg_day_and_active_limits_and_ungeocodable_stop():
 
 def test_logistics_stop_count_and_no_draft():
     d = draft([{"name": str(i), "duration_minutes": 1} for i in range(4)])
-    with patch("backend.app.checks.geocode", return_value=None):
-        result = check_logistics(d, REQUEST, {})
+    result = check_logistics(d, REQUEST, {})
     assert "4 stops" in result.reason
     assert run_checks({"draft": None}) == [{"name": "no draft", "passed": False,
                                              "reason": "No draft is available to check."}]
+
+
+def test_logistics_uses_stored_coordinates_without_geocoding():
+    d = draft([
+        {"name": "A", "duration_minutes": 10, "lat": 1, "lon": 1},
+        {"name": "B", "duration_minutes": 10, "lat": 1.1, "lon": 1.1},
+    ])
+    with patch("backend.app.tools.geocode", side_effect=AssertionError("must not geocode")) as geocode, \
+         patch("backend.app.checks.get_distance", return_value={"minutes": 20}):
+        result = check_logistics(d, REQUEST, {})
+    geocode.assert_not_called()
+    assert "travel times not checked" not in result.reason
 
 
 def test_sources_require_source_or_unverified_and_report_count():

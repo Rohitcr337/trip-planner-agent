@@ -46,7 +46,7 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     with patch("backend.app.graph.nodes.ask", return_value=DRAFT) as ask, \
          patch("backend.app.graph.nodes.retrieve", return_value=[PASSAGE]), \
          patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
-         patch("backend.app.checks.geocode", return_value=None), \
+         patch("backend.app.graph.nodes.geocode", return_value=None), \
          patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
         response = client.post("/plan", json=REQUEST)
 
@@ -54,7 +54,7 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     assert "text/event-stream" in response.headers["content-type"]
     events = _events(response.text)
     step_names = [payload["name"] for name, payload in events if name == "step"]
-    assert step_names == ["intake", "retrieve", "fetch", "draft", "check"]
+    assert step_names == ["intake", "retrieve", "fetch", "draft", "locate", "check"]
     for name, payload in events[:-1]:
         assert name == "step"
         assert isinstance(payload["elapsed_seconds"], float)
@@ -62,6 +62,8 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     event_name, result = events[-1]
     assert event_name == "result"
     assert result["draft"]["city"] == "Jaipur"
+    stop = result["draft"]["days"][0]["stops"][0]
+    assert stop["lat"] is None and stop["lon"] is None
     assert result["checks"]
     assert result["revisions"] == 0
     assert result["unresolved"] == []
@@ -110,7 +112,7 @@ def test_demo_mode_uses_passage_grounded_plan_without_api_calls(tmp_path, monkey
     with patch("backend.app.graph.nodes.ask", side_effect=AssertionError("API call attempted")), \
          patch("backend.app.graph.nodes.retrieve", return_value=passages), \
          patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
-         patch("backend.app.checks.geocode", return_value=None), \
+         patch("backend.app.graph.nodes.geocode", return_value=None), \
          patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
         response = client.post("/plan", json=REQUEST)
 

@@ -126,6 +126,7 @@ _STEP_MESSAGES = {
     "retrieve": "Guide passages retrieved.",
     "fetch": "Weather and cost estimates loaded.",
     "draft_itinerary": "Itinerary draft created.",
+    "locate": "Stop coordinates looked up.",
     "check": "Draft checks completed.",
     "revise": "Draft revision completed.",
 }

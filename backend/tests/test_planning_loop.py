@@ -43,7 +43,7 @@ def run_graph(model_responses):
          patch("backend.app.graph.nodes.retrieve", return_value=[]), \
          patch("backend.app.graph.nodes.get_weather", return_value={"available": True, "days": []}), \
          patch("backend.app.graph.nodes.load_costs", return_value=COSTS), \
-         patch("backend.app.checks.geocode", return_value=None):
+         patch("backend.app.graph.nodes.geocode", return_value=None):
         result = build_planning_graph().invoke(initial_state())
     return result, ask
 
@@ -68,7 +68,7 @@ def test_failure_then_passes_after_one_revision_and_prompt_has_feedback():
          patch("backend.app.graph.nodes.retrieve", return_value=[]), \
          patch("backend.app.graph.nodes.get_weather", return_value={"available": True, "days": []}), \
          patch("backend.app.graph.nodes.load_costs", return_value=COSTS), \
-         patch("backend.app.checks.geocode", return_value=None):
+         patch("backend.app.graph.nodes.geocode", return_value=None):
         result = build_planning_graph().invoke(initial_state())
     assert result["revisions"] == 1
     assert all(check["passed"] for check in result["checks"])

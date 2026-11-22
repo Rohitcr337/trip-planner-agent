@@ -19,7 +19,7 @@ from backend.app.itinerary import Itinerary, Source, build_draft_prompt
 from backend.app.llm import ask
 from backend.app.retrieve import retrieve
 from backend.app.schemas import TripRequest
-from backend.app.tools import get_weather
+from backend.app.tools import geocode, get_weather
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +212,41 @@ def draft_node(state: TripState) -> TripState:
         result["feedback"] = [*state.get("feedback", []), f"Draft could not be created: {exc}"]
         _log("draft", request["destination"], "feedback", time.perf_counter() - t0)
         return result
+
+
+def locate_node(state: TripState) -> TripState:
+    """Add real coordinates to stops when the optional geocoder can find them."""
+    t0 = time.perf_counter()
+    draft = state.get("draft")
+    request = state.get("request") or {}
+    if draft is None:
+        _log("locate", "no draft", "skipped", time.perf_counter() - t0)
+        return state
+
+    located = dict(draft)
+    city = request.get("destination", draft.get("city", ""))
+    located_days = []
+    count = 0
+    for day in draft.get("days", []):
+        located_day = dict(day)
+        located_stops = []
+        for stop in day.get("stops", []):
+            located_stop = dict(stop)
+            point = geocode(str(stop.get("name", "")), city)
+            if point is None:
+                located_stop["lat"] = None
+                located_stop["lon"] = None
+            else:
+                located_stop["lat"], located_stop["lon"] = point
+                count += 1
+            located_stops.append(located_stop)
+        located_day["stops"] = located_stops
+        located_days.append(located_day)
+    located["days"] = located_days
+    result = dict(state)
+    result["draft"] = located
+    _log("locate", city, f"{count} stops located", time.perf_counter() - t0)
+    return result
 
 
 def _parse_and_validate_draft(raw: str, state: TripState) -> dict:

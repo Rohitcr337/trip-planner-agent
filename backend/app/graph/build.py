@@ -12,6 +12,7 @@ from backend.app.graph.nodes import (
     draft_node,
     fetch_node,
     intake,
+    locate_node,
     retrieve_node,
     revise_node,
     unresolved_node,
@@ -45,16 +46,18 @@ def build_planning_graph():
     builder = _base_builder()
     builder.add_node("draft_itinerary", draft_node)
     builder.add_node("check", check_node)
+    builder.add_node("locate", locate_node)
     builder.add_node("revise", revise_node)
     builder.add_node("mark_unresolved", unresolved_node)
     builder.add_edge("fetch", "draft_itinerary")
-    builder.add_edge("draft_itinerary", "check")
+    builder.add_edge("draft_itinerary", "locate")
+    builder.add_edge("locate", "check")
     builder.add_conditional_edges(
         "check",
         _route_after_check,
         {"end": END, "revise": "revise", "unresolved": "mark_unresolved"},
     )
-    builder.add_edge("revise", "check")
+    builder.add_edge("revise", "locate")
     builder.add_edge("mark_unresolved", END)
     return builder.compile()
 

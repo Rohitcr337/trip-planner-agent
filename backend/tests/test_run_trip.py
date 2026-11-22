@@ -56,7 +56,7 @@ def test_offline_run_uses_retrieved_stops_and_makes_no_model_or_http_calls():
     lines = []
     with patch("backend.app.graph.nodes.retrieve", return_value=[PASSAGE]), \
          patch("backend.app.graph.nodes.load_costs", return_value=COSTS), \
-         patch("backend.app.checks.geocode", return_value=None), \
+         patch("backend.app.graph.nodes.geocode", return_value=None), \
          patch("backend.app.checks.get_distance", side_effect=AssertionError("unexpected distance call")), \
          patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")), \
          patch("scripts.run_trip.real_ask", side_effect=AssertionError("unexpected model call")):
@@ -78,7 +78,7 @@ def test_offline_fake_also_handles_revision_prompts():
     ])
     with patch("backend.app.graph.nodes.retrieve", return_value=[PASSAGE]), \
          patch("backend.app.graph.nodes.load_costs", return_value=COSTS), \
-         patch("backend.app.checks.geocode", return_value=None), \
+         patch("backend.app.graph.nodes.geocode", return_value=None), \
          patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")), \
          patch("scripts.run_trip.real_ask", side_effect=AssertionError("unexpected model call")):
         result = run_trip(args, output=lambda line: None)
