@@ -30,6 +30,11 @@ def test_options_returns_form_values():
     assert response.status_code == 200
     data = response.json()
     assert data["cities"] == ["Jaipur", "Chennai", "Goa"]
+    assert data["destinations"] == [
+        {"name": "Jaipur", "lat": 26.9124, "lon": 75.7873},
+        {"name": "Chennai", "lat": 13.0827, "lon": 80.2707},
+        {"name": "Goa", "lat": 15.4909, "lon": 73.8278},
+    ]
     assert data["styles"] == ["relaxed", "packed"]
     assert data["day_range"] == {"min": 1, "max": 7}
     assert "history" in data["interest_suggestions"]

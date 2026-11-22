@@ -15,7 +15,7 @@ import time
 from collections.abc import Iterator
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from starlette.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -25,6 +25,7 @@ from backend.app.fake_model import create_fake_model
 from backend.app.checks import trip_cost_breakdown
 from backend.app.quota import ModelCallLimitReached, limit_reached
 from backend.app.schemas import TripRequest
+from backend.app.tools import CITY_COORDS
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -77,6 +78,10 @@ def options():
     """Return the choices used to build a trip request form."""
     return {
         "cities": ["Jaipur", "Chennai", "Goa"],
+        "destinations": [
+            {"name": name, "lat": coords[0], "lon": coords[1]}
+            for name, coords in CITY_COORDS.items()
+        ],
         "styles": ["relaxed", "packed"],
         "day_range": {"min": 1, "max": 7},
         "interest_suggestions": [
@@ -158,6 +163,10 @@ def _planning_event_stream(request: TripRequest, demo: bool = False) -> Iterator
         yield from _stream_updates(updates, current, previous)
         yield _event("result", {
             "draft": current.get("draft"),
+            "city_center": {
+                "lat": CITY_COORDS[request.destination][0],
+                "lon": CITY_COORDS[request.destination][1],
+            },
             "cost_breakdown": trip_cost_breakdown(
                 current.get("draft") or {},
                 request.model_dump(),
@@ -193,8 +202,26 @@ def _stream_updates(updates, current: dict, previous: float) -> Iterator[str]:
 
 
 @app.post("/plan")
-def plan(request: TripRequest):
+def plan(request: dict):
     """Stream planning progress and the final checked itinerary as SSE."""
+    try:
+        validated_request = TripRequest.model_validate(request)
+    except ValidationError as exc:
+        unsupported_destination = any(
+            error.get("loc") == ("destination",)
+            and error.get("type") == "literal_error"
+            for error in exc.errors()
+        )
+        if unsupported_destination:
+            available = ", ".join(CITY_COORDS)
+            return StreamingResponse(
+                iter([_event(
+                    "error",
+                    {"message": f"That destination isn't available yet. Available now: {available}."},
+                )]),
+                media_type="text/event-stream",
+            )
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     demo = os.getenv("DEMO_MODE") == "1"
     if not demo and limit_reached():
         raise HTTPException(
@@ -202,7 +229,7 @@ def plan(request: TripRequest):
             detail="Daily model call limit reached. Try again tomorrow.",
         )
     return StreamingResponse(
-        _planning_event_stream(request, demo=demo),
+        _planning_event_stream(validated_request, demo=demo),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

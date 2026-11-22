@@ -46,7 +46,7 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     with patch("backend.app.graph.nodes.ask", return_value=DRAFT) as ask, \
          patch("backend.app.graph.nodes.retrieve", return_value=[PASSAGE]), \
          patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
-         patch("backend.app.graph.nodes.geocode", return_value=None), \
+         patch("backend.app.graph.nodes.geocode", return_value=(26.9124, 75.7873)), \
          patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
         response = client.post("/plan", json=REQUEST)
 
@@ -62,6 +62,7 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     event_name, result = events[-1]
     assert event_name == "result"
     assert result["draft"]["city"] == "Jaipur"
+    assert result["city_center"] == {"lat": 26.9124, "lon": 75.7873}
     assert result["cost_breakdown"] == {
         "stops_inr": 10.0,
         "transport_meals_inr": 250.0,
@@ -71,7 +72,7 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
         "complete": True,
     }
     stop = result["draft"]["days"][0]["stops"][0]
-    assert stop["lat"] is None and stop["lon"] is None
+    assert stop["lat"] == 26.9124 and stop["lon"] == 75.7873
     assert result["checks"]
     assert result["revisions"] == 0
     assert result["unresolved"] == []
@@ -88,6 +89,20 @@ def test_plan_returns_friendly_429_when_daily_limit_is_reached(tmp_path, monkeyp
         response = client.post("/plan", json=REQUEST)
     assert response.status_code == 429
     assert "Daily model call limit reached" in response.json()["detail"]
+    ask.assert_not_called()
+
+
+def test_plan_streams_friendly_error_for_unsupported_destination():
+    request = {**REQUEST, "destination": "Wakanda"}
+    with patch("backend.app.graph.nodes.ask") as ask, \
+         patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
+        response = client.post("/plan", json=request)
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+    assert _events(response.text) == [(
+        "error",
+        {"message": "That destination isn't available yet. Available now: Jaipur, Chennai, Goa."},
+    )]
     ask.assert_not_called()
 
 
