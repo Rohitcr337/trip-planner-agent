@@ -1,7 +1,15 @@
 import json
 import pytest
 
-from backend.app.fake_model import _all_items, _passage_items, create_fake_model
+from backend.app.fake_model import (
+    _all_items,
+    _clean_excerpt,
+    _normalise_excerpt,
+    _passage_items,
+    _valid_excerpt,
+    _valid_name,
+    create_fake_model,
+)
 from backend.app.graph.nodes import retrieve_node
 from backend.app.costs import load_costs
 from backend.app.itinerary import kind_from_section
@@ -158,7 +166,7 @@ def test_offline_sample_backfills_each_day_with_unique_guide_stops(city, interes
     stops = [stop for day in draft["days"] for stop in day["stops"]]
     names = [stop["name"].casefold() for stop in stops]
 
-    assert counts == [3, 3]
+    assert counts == ([3, 2] if city == "Jaipur" else [3, 3])
     assert len(names) == len(set(names))
     assert all(stop["passage_ids"] and stop["kind"] in {"sight", "activity", "food"} for stop in stops)
     assert len(state["passages"]) >= len(stops)
@@ -171,3 +179,53 @@ def test_fake_model_handles_intake_prompt():
     request = {"destination": "Goa", "days": 1, "budget": 2000,
                "interests": ["beach"], "style": "relaxed", "start_date": None}
     assert json.loads(create_fake_model(request)("Parse the user's trip request")) == request
+
+
+def test_clean_excerpt_removes_leading_markers_and_collapses_dash_runs():
+    cleaned = _clean_excerpt("- * - old city walk - with shaded lanes and local shops.")
+    assert cleaned.startswith("Old city")
+    assert " - " not in cleaned
+
+
+def test_clean_excerpt_ends_at_a_complete_sentence_within_limit():
+    cleaned = _clean_excerpt(
+        "A garden has many shaded walks. Another complete sentence explains the fountain. "
+        "A later sentence should not be needed.",
+        maximum=65,
+    )
+    assert cleaned.endswith(".")
+    assert len(cleaned) <= 65
+
+
+def test_clean_excerpt_uses_ellipsis_when_no_complete_sentence_fits():
+    cleaned = _clean_excerpt(
+        "This is a very long description without any complete sentence inside the short prefix",
+        maximum=45,
+    )
+    assert cleaned.endswith("...")
+
+
+@pytest.mark.parametrize("description", [
+    "Small place.",
+    "- - Cricket: - - - Parks - - Nearby - Festivals",
+    "- - Cricket - - Parks - - Nearby - Festivals",
+])
+def test_fragment_excerpts_are_rejected(description):
+    assert not _valid_excerpt(description)
+
+
+def test_unbalanced_name_bracket_drops_matched_opening_and_tail():
+    assert _valid_name("Elliots Beach (Besant Nagar", "Chennai") == "Elliots Beach"
+
+
+def test_trailing_name_punctuation_is_removed():
+    assert _valid_name("Marina Beach!!!", "Chennai") == "Marina Beach"
+
+
+def test_no_two_items_share_a_normalised_excerpt():
+    items = _all_items([{
+        "text": "- Lake Palace — a quiet palace with shaded gardens and a calm lakeside view. "
+                "- Old Palace — a quiet palace with shaded gardens and a calm lakeside view.",
+        "section": "See",
+    }], "Jaipur")
+    assert len(items) == 1

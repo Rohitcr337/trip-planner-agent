@@ -58,8 +58,29 @@ _DISTRICT_PATTERNS = (
 )
 
 
+def _clean_bracketed_name(value: str) -> str:
+    name = clean_text(value).strip()
+    pairs = {"(": ")", "[": "]", "{": "}"}
+    opening_positions: dict[str, list[int]] = {opening: [] for opening in pairs}
+    for index, character in enumerate(name):
+        if character in pairs:
+            opening_positions[character].append(index)
+        elif character in pairs.values():
+            opener = next((open_char for open_char, close_char in pairs.items()
+                           if close_char == character), None)
+            if opener and opening_positions[opener]:
+                opening_positions[opener].pop()
+    unmatched = [
+        positions[-1] for positions in opening_positions.values() if positions
+    ]
+    if unmatched:
+        name = name[:min(unmatched)].rstrip()
+    return name
+
+
 def _valid_name(value: str, city: str) -> str | None:
-    name = clean_text(value).strip(" \t\r\n:;,.—–-_'\"()[]{}")
+    name = _clean_bracketed_name(value)
+    name = name.strip(" \t\r\n:;,.!?—–-_'\"()[]{}")
     name = re.sub(r"\s*\([^)]*\)\s*$", "", name).strip()
     words = name.split()
     while len(words) > 1 and words[0].casefold() in {"a", "an", "the", "at", "in"}:
@@ -106,11 +127,12 @@ def _fallback_candidates(text: str, city: str, passage_index: int, passage: dict
         if name.casefold() in seen:
             continue
         sentence = next((part for part in sentences if name.casefold() in part.casefold()), text)
-        if len(sentence.split()) < 6:
+        description = _clean_excerpt(sentence)
+        if not _valid_excerpt(description):
             continue
         items.append({
             "name": name,
-            "description": _truncate_excerpt(sentence),
+            "description": description,
             "passage_index": passage_index,
             "passage": passage,
         })
@@ -131,8 +153,8 @@ def _passage_items(passage: dict[str, Any], passage_index: int, city: str) -> li
         has_item_separator = True
         raw_name, raw_description = segment.split("—", 1)
         name = _valid_name(raw_name, city)
-        description = clean_text(raw_description).strip(" —–-:;,.\t")
-        if name and len(description.split()) >= 6:
+        description = _clean_excerpt(raw_description)
+        if name and _valid_excerpt(description):
             items.append({
                 "name": name,
                 "description": description,
@@ -148,10 +170,14 @@ def _all_items(
     passages: list[dict[str, Any]], city: str, passage_offset: int = 0
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
+    seen_excerpts: set[str] = set()
     for passage_index, passage in enumerate(passages, start=passage_offset):
         for item in _passage_items(passage, passage_index, city):
-            if not any(_names_overlap(item["name"], existing["name"]) for existing in items):
+            excerpt_key = _normalise_excerpt(item["description"])
+            if (excerpt_key not in seen_excerpts
+                    and not any(_names_overlap(item["name"], existing["name"]) for existing in items)):
                 items.append(item)
+                seen_excerpts.add(excerpt_key)
     return items
 
 
@@ -177,13 +203,55 @@ def _area_from_passage(text: str, city: str) -> str:
 
 
 def _truncate_excerpt(value: str, maximum: int = 200) -> str:
-    text = clean_text(value)
+    return _clean_excerpt(value, maximum)
+
+
+def _clean_excerpt(value: str, maximum: int = 200) -> str:
+    text = clean_text(value).strip(" \t\r\n:;,—–-_'\"")
+    text = re.sub(r"^(?:[-*•]\s*)+", "", text)
+    text = re.sub(r"\s+-\s+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip(" \t:;,—–-")
+    if not text:
+        return ""
+    if text[0].islower():
+        text = text[0].upper() + text[1:]
+
     if len(text) <= maximum:
         return text
+
     prefix = text[:maximum]
-    if " " not in prefix:
-        return ""
-    return prefix.rsplit(" ", 1)[0].rstrip(" ,;:-")
+    complete_sentences = [
+        match.end() for match in re.finditer(r"[.!?](?=\s|$)", prefix)
+    ]
+    if complete_sentences:
+        text = prefix[:complete_sentences[-1]].strip()
+    else:
+        cut = prefix.rfind(" ")
+        text = (prefix[:cut].rstrip(" ,;:-") if cut > 0 else "")
+        if text:
+            text += "..."
+    return text
+
+
+def _normalise_excerpt(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", _clean_excerpt(value).casefold()).strip()
+
+
+def _valid_excerpt(value: str) -> bool:
+    text = clean_text(value)
+    words = re.findall(r"[A-Za-z0-9]+", text)
+    if len(words) < 6:
+        return False
+    tokens = re.findall(r"[^A-Za-z0-9\s]+|\S+", text)
+    dash_colon_tokens = sum(
+        1 for token in tokens
+        if "-" in token or "–" in token or "—" in token or ":" in token
+    )
+    if tokens and dash_colon_tokens / len(tokens) > 0.25:
+        return False
+    if text[:80].count(" - ") >= 3:
+        return False
+    return True
 
 
 def excerpt_for_stop(name: str, passage: dict[str, Any], city: str) -> str:
