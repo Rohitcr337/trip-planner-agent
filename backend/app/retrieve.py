@@ -53,6 +53,53 @@ def retrieve(city: str, query: str, k: int = 4) -> list[dict[str, Any]]:
     ]
 
 
+def retrieve_activity_passages(city: str, interests: list[str]) -> list[dict[str, Any]]:
+    """Return See/Do chunks ranked by their best interest score, then guide order."""
+    loaded = _load_index()
+    if loaded is None:
+        return []
+    embedder, store = loaded
+    eligible = [
+        (index, metadata)
+        for index, metadata in enumerate(store.metadata)
+        if metadata.get("city") == city
+        and metadata.get("section", "").casefold() in {"see", "do"}
+    ]
+    if not eligible:
+        return []
+
+    indexes_by_key: dict[tuple[str, str, str, str], list[int]] = {}
+    for index, metadata in eligible:
+        key = (
+            metadata.get("text", ""), metadata.get("section", ""),
+            metadata.get("source_name", ""), metadata.get("source_url", ""),
+        )
+        indexes_by_key.setdefault(key, []).append(index)
+
+    scores = {index: 0.0 for index, _ in eligible}
+    for interest in interests:
+        vector = embedder.transform([interest])[0]
+        matches = store.query(vector, k=len(store.metadata), city=city)
+        for match in matches:
+            key = (
+                match.get("text", ""), match.get("section", ""),
+                match.get("source_name", ""), match.get("source_url", ""),
+            )
+            for index in indexes_by_key.get(key, []):
+                scores[index] = max(scores[index], float(match.get("score", 0.0)))
+
+    return [
+        {
+            "text": metadata.get("text", ""),
+            "section": metadata.get("section", ""),
+            "source_name": metadata.get("source_name", ""),
+            "source_url": metadata.get("source_url", ""),
+            "score": scores[index],
+        }
+        for index, metadata in sorted(eligible, key=lambda pair: (-scores[pair[0]], pair[0]))
+    ]
+
+
 def clear_index_cache() -> None:
     """Clear the process-local lazy index cache, primarily for tests."""
     global _embedder, _store

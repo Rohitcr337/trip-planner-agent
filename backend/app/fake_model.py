@@ -144,16 +144,27 @@ def _passage_items(passage: dict[str, Any], passage_index: int, city: str) -> li
     return items
 
 
-def _all_items(passages: list[dict[str, Any]], city: str) -> list[dict[str, Any]]:
+def _all_items(
+    passages: list[dict[str, Any]], city: str, passage_offset: int = 0
+) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for passage_index, passage in enumerate(passages):
+    for passage_index, passage in enumerate(passages, start=passage_offset):
         for item in _passage_items(passage, passage_index, city):
-            key = item["name"].casefold()
-            if key not in seen:
+            if not any(_names_overlap(item["name"], existing["name"]) for existing in items):
                 items.append(item)
-                seen.add(key)
     return items
+
+
+def _names_overlap(first: str, second: str) -> bool:
+    first_words = re.findall(r"[a-z0-9]+", first.casefold())
+    second_words = re.findall(r"[a-z0-9]+", second.casefold())
+    return any(
+        first_words[start:start + len(second_words)] == second_words
+        for start in range(len(first_words) - len(second_words) + 1)
+    ) or any(
+        second_words[start:start + len(first_words)] == first_words
+        for start in range(len(second_words) - len(first_words) + 1)
+    )
 
 
 def _area_from_passage(text: str, city: str) -> str:
@@ -191,8 +202,11 @@ class FakeModel:
         self.passages: list[dict[str, Any]] = []
         self.costs: dict[str, Any] = {}
 
-    def set_passages(self, passages: list[dict[str, Any]]) -> None:
+    def set_passages(
+        self, passages: list[dict[str, Any]], primary_count: int | None = None
+    ) -> None:
         self.passages = list(passages)
+        self.primary_count = len(passages) if primary_count is None else primary_count
 
     def set_costs(self, costs: dict[str, Any]) -> None:
         self.costs = dict(costs)
@@ -209,17 +223,25 @@ class FakeModel:
         slots = TIME_SLOTS.get(style, TIME_SLOTS["relaxed"])
         start_date = self.request.get("start_date")
         start = date.fromisoformat(start_date) if start_date else None
-        items = _all_items(self.passages, city)
+        primary = _all_items(self.passages[:self.primary_count], city)
+        target_per_day = len(slots)
+        target_total = days * target_per_day
+        items = list(primary)
+        if len(items) < target_total:
+            fallback = _all_items(
+                self.passages[self.primary_count:], city, passage_offset=self.primary_count
+            )
+            for item in fallback:
+                if not any(_names_overlap(item["name"], existing["name"]) for existing in items):
+                    items.append(item)
+        items = items[:target_total]
         day_rows = []
         stop_total = 0.0
-        item_cursor = 0
         for day_number in range(1, days + 1):
+            day_items = items[day_number - 1::days]
             stops = []
-            for slot_index, time_slot in enumerate(slots):
-                if item_cursor >= len(items):
-                    break
-                item = items[item_cursor]
-                item_cursor += 1
+            for slot_index, item in enumerate(day_items):
+                time_slot = slots[slot_index]
                 passage = item["passage"]
                 passage_index = item["passage_index"]
                 description = item["description"]
@@ -248,11 +270,14 @@ class FakeModel:
                 })
             day_date = (start + timedelta(days=day_number - 1)).isoformat() if start else None
             day_rows.append({"day": day_number, "date": day_date, "stops": stops, "weather_note": None})
+        assumptions = ["Offline sample; stop costs are estimates from the city cost table."]
+        if len(items) < target_total:
+            assumptions.append("Limited sample content for this destination.")
         return json.dumps({
             "city": city,
             "days": day_rows,
             "total_est_cost_inr": stop_total,
-            "assumptions": ["Offline sample; stop costs are estimates from the city cost table."],
+            "assumptions": assumptions,
         }, ensure_ascii=False)
 
 

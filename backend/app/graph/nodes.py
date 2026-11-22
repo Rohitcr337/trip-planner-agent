@@ -18,7 +18,7 @@ from backend.app.fake_model import excerpt_for_stop
 from backend.app.graph.state import TripState
 from backend.app.itinerary import Itinerary, Source, build_draft_prompt, kind_from_section
 from backend.app.llm import ask
-from backend.app.retrieve import retrieve
+from backend.app.retrieve import retrieve, retrieve_activity_passages
 from backend.app.schemas import TripRequest
 from backend.app.tools import geocode, get_weather
 
@@ -152,9 +152,19 @@ def retrieve_node(state: TripState) -> TripState:
         if key not in seen:
             seen.add(key)
             passages.append(passage)
+    primary_passage_count = len(passages)
     fake_model = state.get("fake_model")
     if fake_model is not None:
-        fake_model.set_passages(passages)
+        backfill = retrieve_activity_passages(destination, interests)
+        for passage in backfill:
+            key = (
+                passage.get("source_name"), passage.get("source_url"),
+                passage.get("section"), passage.get("text"),
+            )
+            if key not in seen:
+                seen.add(key)
+                passages.append(passage)
+        fake_model.set_passages(passages, primary_count=primary_passage_count)
     result = dict(state)
     result["passages"] = passages
     _log("retrieve", query[:80], f"{len(passages)} passages", time.perf_counter() - t0)
