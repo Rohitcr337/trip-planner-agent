@@ -5,13 +5,13 @@ from backend.app.fake_model import _passage_items, create_fake_model
 
 
 PASSAGES = [
-    {"text": "- **Amber Fort** — historic fort in Amer.", "section": "See",
+    {"text": "- **Amber Fort** — a historic fort standing above Amer with old stone walls.", "section": "See",
      "source_name": "Jaipur Guide", "source_url": "https://example.test/fort"},
-    {"text": "- Baga Beach &mdash; local food stalls in North Goa.\n- Anjuna beach — flea market in Bardez.",
+    {"text": "- Baga Beach &mdash; local food stalls serving fresh snacks and meals in North Goa.\n- Anjuna beach — a lively flea market operating every day along the Bardez coast.",
      "section": "See", "source_name": "Goa Guide", "source_url": "https://example.test/beaches"},
-    {"text": "- Panjim Cafe — serves breakfast and snacks in Panjim.\n- Fort Aguada — a historic site in Bardez district.",
+    {"text": "- Panjim Cafe — serves breakfast and snacks at a popular cafe in Panjim each morning.\n- Fort Aguada — a historic site with broad views across Bardez district and nearby coastline.",
      "section": "Eat", "source_name": "Goa Guide", "source_url": "https://example.test/places"},
-    {"text": "- Chapora — home of the Chapora fort in North Goa.\n- **Kitesurfing** &mdash; try the activity near Morjim.\n- Vagator beach — a beach in Bardez.",
+    {"text": "- Chapora — home of the Chapora fort with wide views across North Goa.\n- **Kitesurfing** &mdash; try this popular water activity near Morjim during a windy afternoon.\n- Vagator beach — a quiet beach with cafes and swimming spots in Bardez district.",
      "section": "Do", "source_name": "Goa Guide", "source_url": "https://example.test/activities"},
 ]
 COSTS = {"typical_entry_fee_low": 42, "meal_budget": 123}
@@ -73,7 +73,7 @@ def test_invalid_or_fragment_items_do_not_use_section_heading_fallback():
 def test_fake_model_produces_fewer_stops_instead_of_repeating_items():
     fake = create_fake_model({"destination": "Goa", "days": 2, "style": "relaxed"})
     fake.set_passages([{
-        "text": "- Chapora — home of the fort. - Agonda — a quiet beach.",
+        "text": "- Chapora — home of the historic fort with views across the green coast. - Agonda — a quiet beach with soft sand and small local cafes.",
         "section": "See", "source_name": "Guide", "source_url": "https://example.test",
     }])
     result = json.loads(fake("draft"))
@@ -107,9 +107,26 @@ def test_non_activity_sections_never_create_sample_stops(section):
 
 def test_activity_section_matching_is_case_insensitive():
     items = _passage_items({
-        "text": "- Chapora — a historic fort.", "section": "sEe",
+        "text": "- Chapora — a historic fort with broad views across the coastline.", "section": "sEe",
     }, 0, "Goa")
     assert [item["name"] for item in items] == ["Chapora"]
+
+
+@pytest.mark.parametrize("name", [
+    "Bangladesh", "Bangladeshi", "India", "Indian", "Rajasthan", "Tamil Nadu",
+    "South Asia", "North Goa", "Central Chennai", "North Jaipur", "East Goa",
+])
+def test_non_attraction_and_city_direction_names_are_rejected(name):
+    from backend.app.fake_model import _valid_name
+
+    assert _valid_name(name, "Chennai") is None
+
+
+def test_items_need_at_least_six_description_words():
+    items = _passage_items({
+        "text": "- Amber Fort \u2014 famous old fort with history.", "section": "See",
+    }, 0, "Jaipur")
+    assert items == []
 
 
 def test_fake_model_handles_intake_prompt():

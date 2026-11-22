@@ -12,7 +12,7 @@ REQUEST = {
     "interests": ["history"], "style": "relaxed", "start_date": None,
 }
 PASSAGE = {
-    "text": "- Amber Fort — a historic fort in Amer.", "section": "See",
+    "text": "- Amber Fort \u2014 a historic fort in Amer with views of the city.", "section": "See",
     "source_name": "Guide", "source_url": "https://example.test/guide",
 }
 CITY_COSTS = {
@@ -76,7 +76,7 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     assert stop["lat"] == 26.9124 and stop["lon"] == 75.7873
     assert stop["kind"] == "sight"
     assert "passage_text" not in stop
-    assert stop["excerpt"] == "a historic fort in Amer"
+    assert stop["excerpt"] == "a historic fort in Amer with views of the city"
     assert result["checks"]
     assert result["revisions"] == 0
     assert result["unresolved"] == []

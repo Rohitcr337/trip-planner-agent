@@ -39,6 +39,15 @@ _CONTEXT_PLACE = re.compile(
     r"((?:[A-Z][A-Za-z’'-]*|and|&)(?:\s+(?:[A-Z][A-Za-z’'-]*|and|&|of|the)){0,3})"
 )
 ACTIVITY_SECTIONS = {"see", "do", "eat", "drink"}
+NON_ATTRACTION_NAMES = frozenset({
+    "bangladesh", "bangladeshi", "india", "indian", "nepal", "nepali",
+    "sri lanka", "sri lankan", "pakistan", "pakistani", "portugal", "portuguese",
+    "rajasthan", "tamil nadu", "kerala", "karnataka", "maharashtra", "gujarat",
+    "bihar", "uttar pradesh", "west bengal", "goa", "south asia", "north india",
+    "south india", "east india", "west india", "central india", "asia", "europe",
+    "africa", "middle east", "north goa", "south goa",
+})
+CITY_DIRECTION_WORDS = frozenset({"central", "north", "south", "east", "west"})
 _DISTRICT_PATTERNS = (
     re.compile(r"\b(?:North|South)\s+Goa\b", re.IGNORECASE),
     re.compile(r"\bBardez\b", re.IGNORECASE),
@@ -59,6 +68,12 @@ def _valid_name(value: str, city: str) -> str | None:
     words = name.split()
     if not 1 <= len(words) <= 5 or name.casefold() == city.casefold():
         return None
+    folded_name = name.casefold()
+    if folded_name in NON_ATTRACTION_NAMES:
+        return None
+    if len(words) == 2 and words[0].casefold() in CITY_DIRECTION_WORDS:
+        if words[1].casefold() in {"jaipur", "chennai", "goa"}:
+            return None
     first = re.sub(r"[^A-Za-z]+$", "", words[0]).casefold()
     if (not first or first[0].isdigit() or first in BANNED_NAME_STARTS
             or words[-1].casefold().strip(".,;:") in _NAME_TRAILING_WORDS
@@ -91,6 +106,8 @@ def _fallback_candidates(text: str, city: str, passage_index: int, passage: dict
         if name.casefold() in seen:
             continue
         sentence = next((part for part in sentences if name.casefold() in part.casefold()), text)
+        if len(sentence.split()) < 6:
+            continue
         items.append({
             "name": name,
             "description": _truncate_excerpt(sentence),
@@ -107,20 +124,22 @@ def _passage_items(passage: dict[str, Any], passage_index: int, city: str) -> li
         return []
     text = clean_text(str(passage.get("text") or ""))
     items: list[dict[str, Any]] = []
+    has_item_separator = False
     for segment in _LIST_ITEM.split(text):
         if "—" not in segment:
             continue
+        has_item_separator = True
         raw_name, raw_description = segment.split("—", 1)
         name = _valid_name(raw_name, city)
         description = clean_text(raw_description).strip(" —–-:;,.\t")
-        if name:
+        if name and len(description.split()) >= 6:
             items.append({
                 "name": name,
                 "description": description,
                 "passage_index": passage_index,
                 "passage": passage,
             })
-    if not items:
+    if not items and not has_item_separator:
         items = _fallback_candidates(text, city, passage_index, passage)
     return items
 
