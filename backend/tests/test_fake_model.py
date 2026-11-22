@@ -6,6 +6,7 @@ from backend.app.fake_model import (
     _clean_excerpt,
     _normalise_excerpt,
     _passage_items,
+    _skip_item,
     _valid_excerpt,
     _valid_name,
     create_fake_model,
@@ -166,7 +167,7 @@ def test_offline_sample_backfills_each_day_with_unique_guide_stops(city, interes
     stops = [stop for day in draft["days"] for stop in day["stops"]]
     names = [stop["name"].casefold() for stop in stops]
 
-    assert counts == ([3, 2] if city == "Jaipur" else [3, 3])
+    assert counts == ([2, 2] if city == "Jaipur" else [3, 3])
     assert len(names) == len(set(names))
     assert all(stop["passage_ids"] and stop["kind"] in {"sight", "activity", "food"} for stop in stops)
     assert len(state["passages"]) >= len(stops)
@@ -229,3 +230,48 @@ def test_no_two_items_share_a_normalised_excerpt():
         "section": "See",
     }], "Jaipur")
     assert len(items) == 1
+
+
+@pytest.mark.parametrize(("name", "description"), [
+    ("Gangaur Festival", "A colourful celebration with music and decorated streets."),
+    ("Summer Parade", "A public event that takes place every year."),
+    ("Old Bazaar Fair", "The fair is held every March with stalls and local crafts."),
+])
+def test_dated_events_are_skipped(name, description):
+    assert _skip_item(name, description)
+
+
+def test_description_is_only_dated_when_first_sentence_has_event_and_date_language():
+    assert _skip_item(
+        "City Museum",
+        "A ceremony is held in January. Visitors can tour galleries throughout the year.",
+    )
+    assert not _skip_item(
+        "City Museum",
+        "A ceremony welcomes visitors. The museum opens throughout the year.",
+    )
+
+
+@pytest.mark.parametrize(("name", "description"), [
+    ("Cricket", "A popular sport played on open grounds with local teams."),
+    ("Football", "A team sport played in a large outdoor stadium."),
+    ("Hockey", "An evening game watched by enthusiastic local supporters."),
+])
+def test_sports_as_standalone_non_visit_names_are_skipped(name, description):
+    assert _skip_item(name, description)
+
+
+def test_sport_name_with_place_word_is_kept():
+    assert not _skip_item(
+        "Cricket Fort",
+        "A former fort where local matches are sometimes played on the grounds.",
+    )
+
+
+def test_passage_items_skip_events_and_standalone_sports():
+    items = _passage_items({
+        "text": "- Gangaur Festival — a colourful festival held in March with crowds and music. "
+                "- Cricket — a popular sport played on open grounds with local teams.",
+        "section": "Do",
+    }, 0, "Jaipur")
+    assert items == []

@@ -39,6 +39,16 @@ _CONTEXT_PLACE = re.compile(
     r"((?:[A-Z][A-Za-z’'-]*|and|&)(?:\s+(?:[A-Z][A-Za-z’'-]*|and|&|of|the)){0,3})"
 )
 ACTIVITY_SECTIONS = {"see", "do", "eat", "drink"}
+EVENT_WORDS = ("festival", "procession", "parade", "fair", "ceremony")
+MONTH_NAMES = (
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+)
+NON_VISIT_WORDS = ("cricket", "football", "hockey", "tennis")
+PLACE_WORDS = (
+    "fort", "temple", "beach", "museum", "park", "lake", "palace",
+    "bazaar", "market",
+)
 NON_ATTRACTION_NAMES = frozenset({
     "bangladesh", "bangladeshi", "india", "indian", "nepal", "nepali",
     "sri lanka", "sri lankan", "pakistan", "pakistani", "portugal", "portuguese",
@@ -128,7 +138,7 @@ def _fallback_candidates(text: str, city: str, passage_index: int, passage: dict
             continue
         sentence = next((part for part in sentences if name.casefold() in part.casefold()), text)
         description = _clean_excerpt(sentence)
-        if not _valid_excerpt(description):
+        if _skip_item(name, description) or not _valid_excerpt(description):
             continue
         items.append({
             "name": name,
@@ -154,7 +164,7 @@ def _passage_items(passage: dict[str, Any], passage_index: int, city: str) -> li
         raw_name, raw_description = segment.split("—", 1)
         name = _valid_name(raw_name, city)
         description = _clean_excerpt(raw_description)
-        if name and _valid_excerpt(description):
+        if name and not _skip_item(name, description) and _valid_excerpt(description):
             items.append({
                 "name": name,
                 "description": description,
@@ -252,6 +262,36 @@ def _valid_excerpt(value: str) -> bool:
     if text[:80].count(" - ") >= 3:
         return False
     return True
+
+
+def _skip_item(name: str, description: str) -> bool:
+    folded_name = name.casefold()
+    if any(re.search(rf"\b{re.escape(word)}\b", folded_name) for word in EVENT_WORDS):
+        return True
+
+    first_sentence = re.split(r"[.!?]", description, maxsplit=1)[0].casefold()
+    has_event_word = any(
+        re.search(rf"\b{re.escape(word)}\b", first_sentence)
+        for word in EVENT_WORDS
+    )
+    has_date_language = (
+        any(re.search(rf"\b{month}\b", first_sentence) for month in MONTH_NAMES)
+        or "annually" in first_sentence
+        or "every year" in first_sentence
+        or re.search(r"\bheld\b", first_sentence) is not None
+    )
+    if has_event_word and has_date_language:
+        return True
+
+    has_non_visit_word = any(
+        re.search(rf"\b{re.escape(word)}\b", folded_name)
+        for word in NON_VISIT_WORDS
+    )
+    has_place_word = any(
+        re.search(rf"\b{re.escape(word)}\b", folded_name)
+        for word in PLACE_WORDS
+    )
+    return bool(has_non_visit_word and not has_place_word)
 
 
 def excerpt_for_stop(name: str, passage: dict[str, Any], city: str) -> str:
