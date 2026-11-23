@@ -71,3 +71,9 @@ Numbered pins match stop numbers within each day. Dashed lines connect adjacent 
 Each stop shows its short excerpt and source links, or an unverified badge. The collapsible checks panel retains the backend's reasons and revision count. A reason beginning with `skipped:` is shown as SKIPPED rather than PASS.
 
 The destination search uses `/options`; unsupported searches offer only available destinations. Stop swapping and budget re-planning are not implemented yet.
+
+## Accounts and saved trips
+
+Create an account or sign in from the header. The session token stays in memory and `sessionStorage` for the current browser tab; signing out or receiving an expired-session response clears it. Account requests use the backend `/auth` endpoints.
+
+After a live plan is ready, choose **Approve and save** to store it and approve it. Sample plans cannot be saved. The **My trips** page lists approved trips newest first; open a trip to review its itinerary, estimate, map and checks, or delete it after confirming. Saved trip pages are read-only.

@@ -13,6 +13,7 @@ import CostSummary from "./components/CostSummary.jsx";
 import MapView from "./components/MapView.jsx";
 import ChecksPanel from "./components/ChecksPanel.jsx";
 import SavePlanActions from "./components/SavePlanActions.jsx";
+import SavedTrips from "./components/SavedTrips.jsx";
 
 const HOME_PATHS = new Set(["/", "/index.html"]);
 
@@ -156,12 +157,23 @@ function Planner() {
 }
 
 export default function App() {
+  const [route, setRoute] = useState(() => window.location.hash || window.location.pathname);
+  useEffect(() => {
+    const syncRoute = () => setRoute(window.location.hash || window.location.pathname);
+    window.addEventListener("hashchange", syncRoute);
+    return () => window.removeEventListener("hashchange", syncRoute);
+  }, []);
+  const navigate = (path) => {
+    window.location.hash = path.startsWith("#") ? path.slice(1) : path;
+    setRoute(window.location.hash);
+  };
+  const tripMatch = route.match(/^#?\/trips(?:\/([^/]+))?\/?$/);
   return (
     <AuthProvider>
       <div className="flex min-h-screen flex-col bg-bg text-text">
         <Header />
         <main className="mx-auto w-full max-w-content flex-1 px-4 pb-16 sm:px-6">
-          {HOME_PATHS.has(window.location.pathname) ? <Planner /> : <NotFound />}
+          {tripMatch ? <SavedTrips tripId={tripMatch[1] || null} navigate={navigate} /> : HOME_PATHS.has(route) ? <Planner /> : <NotFound />}
         </main>
         <Footer />
       </div>

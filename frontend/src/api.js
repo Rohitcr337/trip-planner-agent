@@ -250,3 +250,15 @@ export function createTrip(request, result) {
 export function approveTrip(tripId) {
   return apiRequest(`/trips/${encodeURIComponent(tripId)}/approve`, { method: "POST", auth: true });
 }
+
+export function listTrips() {
+  return apiRequest("/trips", { auth: true });
+}
+
+export function fetchTrip(tripId) {
+  return apiRequest(`/trips/${encodeURIComponent(tripId)}`, { auth: true });
+}
+
+export function deleteTrip(tripId) {
+  return apiRequest(`/trips/${encodeURIComponent(tripId)}`, { method: "DELETE", auth: true });
+}

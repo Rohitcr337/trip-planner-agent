@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { API_URL, approveTrip, createEventParser, createTrip, fetchOptions, MESSAGES, streamPlan } from "../api.js";
+import { API_URL, approveTrip, createEventParser, createTrip, deleteTrip, fetchOptions, fetchTrip, listTrips, MESSAGES, streamPlan } from "../api.js";
 import { clearSession, setSession } from "../auth.js";
 
 const request = { destination: "Jaipur", days: 2, budget: 10000, interests: ["history"], style: "relaxed", start_date: null };
@@ -169,6 +169,23 @@ describe("saved trip requests", () => {
       method: "POST",
       headers: expect.objectContaining({ Authorization: "Bearer session-token" }),
     }));
+    clearSession();
+  });
+
+  it("loads saved trips and deletes them through authenticated requests", async () => {
+    setSession("session-token");
+    const trips = { trips: [{ id: 17 }] };
+    mockFetch(new Response(JSON.stringify(trips)));
+    await expect(listTrips()).resolves.toMatchObject({ ok: true, data: trips });
+    expect(fetch).toHaveBeenLastCalledWith(`${API_URL}/trips`, expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer session-token" }) }));
+
+    mockFetch(new Response(JSON.stringify({ id: 17 })));
+    await expect(fetchTrip(17)).resolves.toMatchObject({ ok: true });
+    expect(fetch).toHaveBeenLastCalledWith(`${API_URL}/trips/17`, expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer session-token" }) }));
+
+    mockFetch(new Response(null, { status: 204 }));
+    await expect(deleteTrip(17)).resolves.toMatchObject({ ok: true, status: 204 });
+    expect(fetch).toHaveBeenLastCalledWith(`${API_URL}/trips/17`, expect.objectContaining({ method: "DELETE", headers: expect.objectContaining({ Authorization: "Bearer session-token" }) }));
     clearSession();
   });
 });
