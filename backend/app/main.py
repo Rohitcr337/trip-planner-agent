@@ -25,7 +25,12 @@ from backend.app.graph.build import intake_graph, planning_graph
 from backend.app.graph.state import TripState
 from backend.app.fake_model import create_fake_model
 from backend.app.checks import trip_cost_breakdown
-from backend.app.quota import ModelCallLimitReached, limit_reached
+from backend.app.quota import (
+    ModelCallLimitReached,
+    UserModelCallLimitReached,
+    limit_reached,
+    record_user_model_call,
+)
 from backend.app.schemas import TripRequest
 from backend.app.tools import CITY_COORDS
 from backend.app.trips import (
@@ -59,7 +64,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(),
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -198,7 +203,11 @@ def _event(event_name: str, payload: dict) -> str:
     return f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _planning_event_stream(request: TripRequest, demo: bool = False) -> Iterator[str]:
+def _planning_event_stream(
+    request: TripRequest,
+    demo: bool = False,
+    remaining_calls: int | None = None,
+) -> Iterator[str]:
     fake_model = create_fake_model(request.model_dump()) if demo else None
     initial_state: TripState = {
         "user_input": request.model_dump(),
@@ -234,6 +243,7 @@ def _planning_event_stream(request: TripRequest, demo: bool = False) -> Iterator
             "avoid": request.avoid,
             "costs_are_estimates": True,
             "demo": demo,
+            "remaining_calls": remaining_calls,
         })
     except ModelCallLimitReached:
         yield _event("error", {"message": "Daily model call limit reached. Try again tomorrow."})
@@ -259,7 +269,7 @@ def _stream_updates(updates, current: dict, previous: float) -> Iterator[str]:
 
 
 @app.post("/plan")
-def plan(request: dict):
+def plan(request: dict, authorization: str | None = Header(default=None)):
     """Stream planning progress and the final checked itinerary as SSE."""
     try:
         validated_request = TripRequest.model_validate(request)
@@ -280,13 +290,20 @@ def plan(request: dict):
             )
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     demo = os.getenv("DEMO_MODE") == "1"
-    if not demo and limit_reached():
-        raise HTTPException(
-            status_code=429,
-            detail="Daily model call limit reached. Try again tomorrow.",
-        )
+    remaining_calls = None
+    if not demo:
+        user = current_user(authorization)
+        if limit_reached():
+            raise HTTPException(
+                status_code=429,
+                detail="Daily model call limit reached. Try again tomorrow.",
+            )
+        try:
+            remaining_calls = record_user_model_call(user["id"])
+        except UserModelCallLimitReached as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
     return StreamingResponse(
-        _planning_event_stream(validated_request, demo=demo),
+        _planning_event_stream(validated_request, demo=demo, remaining_calls=remaining_calls),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from backend.app import auth
 from backend.app.main import app
 from backend.app import quota
 
@@ -43,14 +44,25 @@ def _events(text):
     return parsed
 
 
+def _auth_headers(tmp_path, monkeypatch, email="planner@example.com"):
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "plan.db"))
+    auth._failed_attempts.clear()
+    token = client.post(
+        "/auth/register",
+        json={"email": email, "password": "correct horse"},
+    ).json()["token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+    headers = _auth_headers(tmp_path, monkeypatch)
     with patch("backend.app.graph.nodes.ask", return_value=DRAFT) as ask, \
          patch("backend.app.graph.nodes.retrieve", return_value=[PASSAGE]), \
          patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
          patch("backend.app.graph.nodes.geocode", return_value=(26.9124, 75.7873)), \
          patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
-        response = client.post("/plan", json=REQUEST)
+        response = client.post("/plan", json=REQUEST, headers=headers)
 
     assert response.status_code == 200
     assert "text/event-stream" in response.headers["content-type"]
@@ -84,25 +96,71 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     assert result["unresolved"] == []
     assert result["costs_are_estimates"] is True
     assert result["demo"] is False
+    assert result["remaining_calls"] == 4
     ask.assert_called_once()
+
+
+def test_live_plan_requires_login(tmp_path, monkeypatch):
+    monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+    with patch("backend.app.graph.nodes.ask") as ask:
+        response = client.post("/plan", json=REQUEST)
+    assert response.status_code == 401
+    ask.assert_not_called()
+
+
+def test_live_plan_has_a_per_user_daily_cap(tmp_path, monkeypatch):
+    monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(quota, "PER_USER_DAILY_CALLS", 1)
+    headers = _auth_headers(tmp_path, monkeypatch)
+    with patch("backend.app.graph.nodes.ask", return_value=DRAFT), \
+         patch("backend.app.graph.nodes.retrieve", return_value=[PASSAGE]), \
+         patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
+         patch("backend.app.graph.nodes.geocode", return_value=(26.9124, 75.7873)), \
+         patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
+        first = client.post("/plan", json=REQUEST, headers=headers)
+        second = client.post("/plan", json=REQUEST, headers=headers)
+    assert first.status_code == 200
+    assert _events(first.text)[-1][1]["remaining_calls"] == 0
+    assert second.status_code == 429
+    assert "Daily planning limit reached" in second.json()["detail"]
+
+
+def test_daily_cap_is_counted_per_user(tmp_path, monkeypatch):
+    monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(quota, "PER_USER_DAILY_CALLS", 1)
+    first_headers = _auth_headers(tmp_path, monkeypatch, email="one@example.com")
+    second_headers = _auth_headers(tmp_path, monkeypatch, email="two@example.com")
+    with patch("backend.app.graph.nodes.ask", return_value=DRAFT), \
+         patch("backend.app.graph.nodes.retrieve", return_value=[PASSAGE]), \
+         patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
+         patch("backend.app.graph.nodes.geocode", return_value=(26.9124, 75.7873)), \
+         patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
+        first = client.post("/plan", json=REQUEST, headers=first_headers)
+        second_user = client.post("/plan", json=REQUEST, headers=second_headers)
+        blocked = client.post("/plan", json=REQUEST, headers=first_headers)
+    assert first.status_code == 200
+    assert second_user.status_code == 200
+    assert blocked.status_code == 429
 
 
 def test_plan_returns_friendly_429_when_daily_limit_is_reached(tmp_path, monkeypatch):
     monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+    headers = _auth_headers(tmp_path, monkeypatch)
     path = quota._quota_path()
     path.write_text(json.dumps({"count": quota.MAX_MODEL_CALLS_PER_DAY}), encoding="utf-8")
     with patch("backend.app.graph.nodes.ask") as ask:
-        response = client.post("/plan", json=REQUEST)
+        response = client.post("/plan", json=REQUEST, headers=headers)
     assert response.status_code == 429
     assert "Daily model call limit reached" in response.json()["detail"]
     ask.assert_not_called()
 
 
-def test_plan_streams_friendly_error_for_unsupported_destination():
+def test_plan_streams_friendly_error_for_unsupported_destination(tmp_path, monkeypatch):
+    headers = _auth_headers(tmp_path, monkeypatch)
     request = {**REQUEST, "destination": "Wakanda"}
     with patch("backend.app.graph.nodes.ask") as ask, \
          patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
-        response = client.post("/plan", json=request)
+        response = client.post("/plan", json=request, headers=headers)
     assert response.status_code == 200
     assert "text/event-stream" in response.headers["content-type"]
     assert _events(response.text) == [(
@@ -114,11 +172,12 @@ def test_plan_streams_friendly_error_for_unsupported_destination():
 
 def test_plan_stream_hides_internal_errors(tmp_path, monkeypatch):
     monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+    headers = _auth_headers(tmp_path, monkeypatch)
     with patch("backend.app.graph.nodes.ask", side_effect=RuntimeError("private transport details")), \
          patch("backend.app.graph.nodes.retrieve", return_value=[]), \
          patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
          patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
-        response = client.post("/plan", json=REQUEST)
+        response = client.post("/plan", json=REQUEST, headers=headers)
     events = _events(response.text)
     assert events[-1] == ("error", {"message": "Planning failed. Please retry."})
     assert "private transport details" not in response.text
@@ -150,6 +209,7 @@ def test_demo_mode_uses_passage_grounded_plan_without_api_calls(tmp_path, monkey
     result = events[-1][1]
     assert events[-1][0] == "result"
     assert result["demo"] is True
+    assert result["remaining_calls"] is None
     stops = result["draft"]["days"][0]["stops"]
     assert len(stops) == 3
     assert all(stop["sources"] for stop in stops)

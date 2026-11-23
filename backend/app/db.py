@@ -49,6 +49,12 @@ def initialize(connection: sqlite3.Connection) -> None:
             created_at TEXT NOT NULL,
             approved_at TEXT
         );
+        CREATE TABLE IF NOT EXISTS user_daily_calls (
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            call_date TEXT NOT NULL,
+            call_count INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (user_id, call_date)
+        );
         """
     )
     connection.commit()

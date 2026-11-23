@@ -48,6 +48,22 @@ def test_cors_defaults_allow_both_local_frontend_origins(monkeypatch):
         assert response.headers["access-control-allow-origin"] == origin
 
 
+def test_cors_preflight_allows_the_authorization_header(monkeypatch):
+    client = _client_with_origins(monkeypatch)
+    response = client.options(
+        "/plan",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization, content-type",
+        },
+    )
+    assert response.status_code == 200
+    allowed = response.headers["access-control-allow-headers"].lower()
+    assert "authorization" in allowed
+    assert "content-type" in allowed
+
+
 def test_cors_environment_value_replaces_defaults(monkeypatch):
     client = _client_with_origins(monkeypatch, "https://frontend.example, https://preview.example")
     allowed = _preflight(client, "https://frontend.example")
