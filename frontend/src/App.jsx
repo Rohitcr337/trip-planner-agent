@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { streamPlan } from "./api.js";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
@@ -16,16 +16,29 @@ const HOME_PATHS = new Set(["/", "/index.html"]);
 
 function Planner() {
   const [plan, setPlan] = useState({ status: "idle", request: null, steps: [], result: null, message: "" });
+  const [formRequest, setFormRequest] = useState(null);
+  const [avoid, setAvoid] = useState([]);
+  const [swapCount, setSwapCount] = useState(0);
   const controllerRef = useRef(null);
 
   useEffect(() => () => controllerRef.current?.abort(), []);
 
-  const startPlan = async (request) => {
+  const requestKey = (request) => JSON.stringify({
+    destination: request?.destination,
+    days: request?.days,
+    budget: request?.budget,
+    interests: request?.interests,
+    style: request?.style,
+    start_date: request?.start_date,
+  });
+
+  const startPlan = async (request, nextAvoid = avoid) => {
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
-    setPlan({ status: "planning", request, steps: [], result: null, message: "" });
-    await streamPlan(request, ({ type, data }) => {
+    const planningRequest = { ...request, avoid: nextAvoid };
+    setPlan((current) => ({ ...current, status: "planning", request: planningRequest, steps: [], message: "" }));
+    await streamPlan(planningRequest, ({ type, data }) => {
       if (controller.signal.aborted) return;
       if (type === "step") {
         setPlan((current) => ({ ...current, steps: [...current.steps, data] }));
@@ -35,6 +48,28 @@ function Planner() {
         setPlan((current) => ({ ...current, status: "error", message: data.message }));
       }
     }, { signal: controller.signal });
+  };
+
+  const handleFormRequestChange = useCallback((request) => setFormRequest(request), []);
+  const hasFormChanges = Boolean(plan.result && formRequest && requestKey(formRequest) !== requestKey(plan.request));
+
+  const replanWithAvoid = (nextAvoid) => {
+    if (!plan.request || swapCount >= 10 && nextAvoid.length > avoid.length) return;
+    setAvoid(nextAvoid);
+    setSwapCount((count) => nextAvoid.length > avoid.length ? count + 1 : count);
+    startPlan({ ...plan.request, avoid: undefined }, nextAvoid);
+  };
+
+  const swapStop = (name) => {
+    if (avoid.some((item) => item.toLowerCase() === name.toLowerCase()) || swapCount >= 10) return;
+    replanWithAvoid([...avoid, name]);
+  };
+
+  const removeAvoid = (name) => replanWithAvoid(avoid.filter((item) => item !== name));
+  const clearAvoid = () => replanWithAvoid([]);
+  const updatePlan = () => {
+    if (!formRequest) return;
+    startPlan(formRequest, avoid);
   };
 
   return (
@@ -56,7 +91,7 @@ function Planner() {
           <h2 id="form-heading" className="text-h3 text-text">
             Plan your trip
           </h2>
-          <TripForm onSubmit={startPlan} planning={plan.status === "planning"} />
+          <TripForm onSubmit={(request) => startPlan(request, avoid)} onRequestChange={handleFormRequestChange} planning={plan.status === "planning"} />
         </section>
 
         <section aria-labelledby="results-heading" className="min-w-0">
@@ -67,23 +102,49 @@ function Planner() {
             {plan.result?.demo === true && <PreviewChip />}
           </div>
           <div className="mt-6 space-y-8 lg:space-y-12">
+            {avoid.length > 0 && (
+              <section aria-label="Places to avoid" className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-small font-semibold text-text">Avoiding:</span>
+                  {avoid.map((name) => (
+                    <button
+                      type="button"
+                      key={name}
+                      onClick={() => removeAvoid(name)}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-pill bg-primary-soft px-3 text-small text-text hover:bg-surface-muted"
+                      aria-label={`Stop avoiding ${name}`}
+                    >
+                      {name} <span aria-hidden="true">x</span>
+                    </button>
+                  ))}
+                  <button type="button" onClick={clearAvoid} className="min-h-11 rounded-control px-3 text-small font-semibold text-primary underline underline-offset-2">
+                    Clear all
+                  </button>
+                </div>
+                <p className="text-small text-text-muted">Re-planning builds a new plan that avoids these places.</p>
+              </section>
+            )}
+            {hasFormChanges && (
+              <button type="button" onClick={updatePlan} className="min-h-11 rounded-control bg-primary px-4 text-small font-semibold text-on-primary hover:bg-primary-hover">
+                Update plan
+              </button>
+            )}
             {plan.status !== "idle" && (
               <ProgressSteps steps={plan.steps} status={plan.status} message={plan.message} />
             )}
-            {plan.status === "error" ? (
-              <ErrorAlert title="Your plan could not be completed" message={plan.message} onRetry={() => startPlan(plan.request)} />
-            ) : (
-              <>
-                <CostSummary breakdown={plan.result?.cost_breakdown ?? null} loading={plan.status === "planning"} />
-                {plan.result && (
-                  <>
-                    <MapView key={plan.result.draft?.city} draft={plan.result.draft} cityCenter={plan.result.city_center} />
-                    <ChecksPanel checks={plan.result.checks} revisions={plan.result.revisions} />
-                  </>
-                )}
-                <ItineraryTimeline draft={plan.result?.draft ?? null} costsAreEstimates={plan.result?.costs_are_estimates === true} unresolved={plan.result?.unresolved ?? []} status={plan.status} />
-              </>
+            {plan.status === "error" && (
+              <ErrorAlert title="Your plan could not be completed" message={plan.message} onRetry={() => startPlan(plan.request, avoid)} />
             )}
+            <div aria-busy={plan.status === "planning"} className={plan.status === "planning" && plan.result ? "opacity-60 transition-opacity" : ""}>
+              <CostSummary breakdown={plan.result?.cost_breakdown ?? null} loading={plan.status === "planning"} />
+              {plan.result && (
+                <>
+                  <MapView key={plan.result.draft?.city} draft={plan.result.draft} cityCenter={plan.result.city_center} />
+                  <ChecksPanel checks={plan.result.checks} revisions={plan.result.revisions} />
+                </>
+              )}
+              <ItineraryTimeline draft={plan.result?.draft ?? null} costsAreEstimates={plan.result?.costs_are_estimates === true} unresolved={plan.result?.unresolved ?? []} status={plan.status} onSwap={plan.result ? swapStop : undefined} />
+            </div>
           </div>
         </section>
       </div>

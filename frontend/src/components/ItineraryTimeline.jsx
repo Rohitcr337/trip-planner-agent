@@ -1,4 +1,4 @@
-import { Clock, Info, MapPin, TriangleAlert } from "lucide-react";
+import { ArrowLeftRight, Clock, Info, MapPin, TriangleAlert } from "lucide-react";
 import { formatDate, formatInr } from "../format.js";
 import SourceBadge from "./SourceBadge.jsx";
 import UnverifiedBadge from "./UnverifiedBadge.jsx";
@@ -53,8 +53,8 @@ function UnresolvedIssues({ issues }) {
   );
 }
 
-export default function ItineraryTimeline({ draft = null, costsAreEstimates = false, unresolved = [], status = "idle" }) {
-  if (status === "planning") return <ItinerarySkeleton />;
+export default function ItineraryTimeline({ draft = null, costsAreEstimates = false, unresolved = [], status = "idle", onSwap }) {
+  if (status === "planning" && !draft) return <ItinerarySkeleton />;
   if (!draft || !draft.days.length) {
     return (
       <div className="space-y-6">
@@ -112,6 +112,17 @@ export default function ItineraryTimeline({ draft = null, costsAreEstimates = fa
                       {stop.notes && <p className="mt-3 max-w-prose break-words text-small text-text-muted">{stop.notes}</p>}
                       <div className="mt-4 flex flex-wrap gap-2">
                         {stop.sources.map((source, sourceIndex) => <SourceBadge key={sourceIndex} source={source} />)}
+                        {onSwap && (
+                          <button
+                            type="button"
+                            onClick={() => onSwap(stop.name)}
+                            aria-label={`Swap ${stop.name} for another place`}
+                            className="inline-flex min-h-11 items-center gap-2 rounded-control border border-border-strong bg-surface px-3 text-small font-semibold text-text transition-colors duration-(--duration-press) ease-standard hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                          >
+                            <ArrowLeftRight aria-hidden="true" className="size-4" />
+                            Swap
+                          </button>
+                        )}
                       </div>
                     </article>
                   </li>

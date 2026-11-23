@@ -7,6 +7,7 @@ vi.mock("../api.js", () => ({ fetchOptions: vi.fn(), streamPlan: vi.fn() }));
 const options = { cities: ["Jaipur", "Chennai", "Goa"], destinations: [{ name: "Jaipur", lat: 26.9, lon: 75.8 }, { name: "Chennai", lat: 13.1, lon: 80.3 }, { name: "Goa", lat: 15.5, lon: 73.8 }], styles: ["relaxed", "packed"], day_range: { min: 1, max: 7 }, interest_suggestions: ["history", "food"] };
 const draft = { city: "Jaipur", days: [{ day: 1, date: null, weather_note: null, stops: [{ name: "Amber Fort", area: "Amer", time_slot: "morning", duration_minutes: 90, est_cost_inr: 500, notes: "Verify details.", sources: [], unverified: true }] }], total_est_cost_inr: 500, assumptions: [] };
 const result = { draft, city_center: { lat: 26.9124, lon: 75.7873 }, cost_breakdown: { stops_inr: 500, transport_meals_inr: 1000, stay_inr: 1000, estimate_inr: 2500, budget_inr: 10000, complete: true }, checks: [], revisions: 0, unresolved: [], costs_are_estimates: true, demo: true };
+const swappedResult = { ...result, draft: { ...draft, days: [{ ...draft.days[0], stops: [{ ...draft.days[0].stops[0], name: "City Palace" }] }] } };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -76,5 +77,41 @@ describe("App", () => {
     await act(async () => finish());
     await waitFor(() => expect(screen.getByRole("heading", { name: "Amber Fort" })).toBeTruthy());
     expect(screen.queryByText("Preview · sample data")).toBeNull();
+  });
+
+  it("swaps a stop, shows the avoid chip, and supports keyboard focus", async () => {
+    streamPlan.mockImplementationOnce(async (_request, onEvent) => onEvent({ type: "result", data: result }))
+      .mockImplementationOnce(async (request, onEvent) => {
+        expect(request.avoid).toEqual(["Amber Fort"]);
+        onEvent({ type: "result", data: swappedResult });
+      });
+    render(<App />);
+    await fillAndSubmit();
+    const swap = await screen.findByRole("button", { name: "Swap Amber Fort for another place" });
+    swap.focus();
+    expect(document.activeElement).toBe(swap);
+    fireEvent.click(swap);
+    expect(await screen.findByRole("heading", { name: "City Palace" })).toBeTruthy();
+    expect(screen.getByText("Avoiding:")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Stop avoiding Amber Fort" })).toBeTruthy();
+  });
+
+  it("keeps the old plan and shows a friendly retry after a failed re-plan", async () => {
+    streamPlan.mockImplementationOnce(async (_request, onEvent) => onEvent({ type: "result", data: result }))
+      .mockImplementationOnce(async (_request, onEvent) => onEvent({ type: "error", data: { message: "Daily limit reached. Please try again tomorrow." } }));
+    render(<App />);
+    await fillAndSubmit();
+    fireEvent.click(await screen.findByRole("button", { name: "Swap Amber Fort for another place" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Daily limit reached");
+    expect(screen.getByRole("heading", { name: "Amber Fort" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("shows update plan when form values change after a result", async () => {
+    streamPlan.mockImplementation(async (_request, onEvent) => onEvent({ type: "result", data: result }));
+    render(<App />);
+    await fillAndSubmit();
+    fireEvent.change(screen.getByLabelText("Budget (INR)"), { target: { value: "12000" } });
+    expect(await screen.findByRole("button", { name: "Update plan" })).toBeTruthy();
   });
 });

@@ -140,7 +140,7 @@ function OptionsSkeleton() {
   );
 }
 
-export default function TripForm({ onSubmit, planning = false }) {
+export default function TripForm({ onSubmit, onRequestChange, planning = false }) {
   const [load, setLoad] = useState({ status: "loading", options: null, message: "" });
   const [values, setValues] = useState(null);
   const [showErrors, setShowErrors] = useState(false);
@@ -171,6 +171,12 @@ export default function TripForm({ onSubmit, planning = false }) {
   useEffect(() => {
     if (attempt > 0) summaryRef.current?.focus();
   }, [attempt]);
+
+  useEffect(() => {
+    if (values && load.options) {
+      onRequestChange?.(validateTrip(values, load.options).request);
+    }
+  }, [values, load.options, onRequestChange]);
 
   if (load.status === "loading") return <OptionsSkeleton />;
   if (load.status === "error") {
