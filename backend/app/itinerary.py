@@ -43,10 +43,19 @@ class Stop(BaseModel):
     unverified: bool = False
 
 
+class DailyWeather(BaseModel):
+    date: Date
+    temp_max_c: float
+    temp_min_c: float
+    precip_mm: float
+    rainy: bool
+
+
 class Day(BaseModel):
     day: int = Field(gt=0)
     date: Date | None = None
     stops: list[Stop]
+    weather: DailyWeather | None = None
     weather_note: str | None = None
 
 
@@ -112,6 +121,7 @@ Rules:
 - For each stop, set kind to sight, activity, food, or null, based on the section of its cited passage.
 - Do not include passage_text or copy full passages into a stop; include only a short excerpt when useful.
 - For each stop, set outdoor to true if the stop is mostly outdoors, otherwise false; use null if unknown.
+- On rainy days in the forecast, prefer indoor stops.
 - Do not invent facts, prices, or opening hours; put uncertainty in notes.
 - Keep each day's stops in a sensible geographic order using area for the neighbourhood or district.
 - Fit the budget using the cost estimates and say so in assumptions.
@@ -129,3 +139,39 @@ Rules:
                 f"{json.dumps(previous_draft, ensure_ascii=False)}\n"
             )
     return prompt
+
+
+def attach_weather(draft: dict[str, Any] | None, weather: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return a copy of a draft with fetched forecast fields attached by date or order."""
+    if draft is None:
+        return None
+    result = dict(draft)
+    forecast_days = (weather or {}).get("days") or []
+    available = bool((weather or {}).get("available"))
+    days = []
+    for index, day in enumerate(draft.get("days", [])):
+        updated_day = dict(day)
+        forecast = None
+        if available:
+            planned_date = day.get("date")
+            if planned_date and any(item.get("date") for item in forecast_days):
+                forecast = next(
+                    (item for item in forecast_days if item.get("date") == str(planned_date)),
+                    None,
+                )
+            elif index < len(forecast_days):
+                forecast = forecast_days[index]
+        updated_day["weather"] = forecast
+        updated_day["weather_note"] = _weather_note(forecast) if forecast else None
+        days.append(updated_day)
+    result["days"] = days
+    return result
+
+
+def _weather_note(weather: dict[str, Any]) -> str:
+    precip = weather["precip_mm"]
+    if weather["rainy"]:
+        return f"Rain likely ({precip:g} mm); indoor options preferred"
+    low = weather["temp_min_c"]
+    high = weather["temp_max_c"]
+    return f"Dry, {low:g} to {high:g} C"

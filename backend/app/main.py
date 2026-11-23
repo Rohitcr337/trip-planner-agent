@@ -25,6 +25,7 @@ from backend.app.graph.build import intake_graph, planning_graph
 from backend.app.graph.state import TripState
 from backend.app.fake_model import create_fake_model
 from backend.app.checks import trip_cost_breakdown
+from backend.app.itinerary import attach_weather
 from backend.app.quota import (
     ModelCallLimitReached,
     UserModelCallLimitReached,
@@ -226,8 +227,13 @@ def _planning_event_stream(
     try:
         updates = planning_graph.stream(initial_state, stream_mode="updates")
         yield from _stream_updates(updates, current, previous)
+        weather = (current.get("live_data") or {}).get("weather") or {}
         yield _event("result", {
-            "draft": current.get("draft"),
+            "draft": attach_weather(current.get("draft"), weather),
+            "weather_status": {
+                "available": bool(weather.get("available")),
+                "reason": weather.get("reason") or "",
+            },
             "city_center": {
                 "lat": CITY_COORDS[request.destination][0],
                 "lon": CITY_COORDS[request.destination][1],

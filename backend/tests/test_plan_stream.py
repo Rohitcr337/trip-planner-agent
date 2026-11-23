@@ -97,7 +97,35 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     assert result["costs_are_estimates"] is True
     assert result["demo"] is False
     assert result["remaining_calls"] == 4
+    assert result["weather_status"] == {
+        "available": False,
+        "reason": "No start date provided; weather not fetched.",
+    }
+    assert stop.get("weather") is None
     ask.assert_called_once()
+
+
+def test_plan_result_attaches_forecast_to_final_days(tmp_path, monkeypatch):
+    monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+    headers = _auth_headers(tmp_path, monkeypatch)
+    forecast = {"available": True, "reason": None, "days": [{
+        "date": "2026-12-01", "temp_max_c": 31.0, "temp_min_c": 24.0,
+        "precip_mm": 12.0, "rainy": True,
+    }]}
+    with patch("backend.app.graph.nodes.ask", return_value=DRAFT), \
+         patch("backend.app.graph.nodes.retrieve", return_value=[PASSAGE]), \
+         patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
+         patch("backend.app.graph.nodes.get_weather", return_value=forecast), \
+         patch("backend.app.graph.nodes.geocode", return_value=None), \
+         patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
+        response = client.post("/plan", json={**REQUEST, "start_date": "2026-12-01"}, headers=headers)
+
+    result = _events(response.text)[-1][1]
+    assert result["weather_status"] == {"available": True, "reason": ""}
+    day = result["draft"]["days"][0]
+    assert day["weather"] == forecast["days"][0]
+    assert day["weather_note"] == "Rain likely (12 mm); indoor options preferred"
+    assert day["weather_note"] != "model weather text"
 
 
 def test_live_plan_requires_login(tmp_path, monkeypatch):

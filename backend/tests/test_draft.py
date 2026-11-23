@@ -2,7 +2,7 @@ import json
 from unittest.mock import patch
 
 from backend.app.graph.nodes import draft_node
-from backend.app.itinerary import build_draft_prompt
+from backend.app.itinerary import attach_weather, build_draft_prompt
 from backend.app.itinerary import MAX_PROMPT_PASSAGE_CHARS, kind_from_section
 
 
@@ -149,6 +149,49 @@ def test_prompt_contains_request_passages_costs_and_feedback():
     assert "Previous draft" in prompt
     assert "true if the stop is mostly outdoors" in prompt
     assert "kind to sight, activity, food, or null" in prompt
+
+
+def test_prompt_recommends_indoor_stops_on_rainy_days():
+    assert "On rainy days in the forecast, prefer indoor stops." in build_draft_prompt(_state())
+
+
+def _weather_draft(dates):
+    return {"days": [{"day": index, "date": day, "weather": {"rainy": True}, "weather_note": "model text"} for index, day in enumerate(dates, 1)]}
+
+
+def test_weather_is_matched_by_date_and_model_weather_text_is_replaced():
+    weather = {"available": True, "days": [
+        {"date": "2026-12-02", "temp_max_c": 31, "temp_min_c": 24, "precip_mm": 12, "rainy": True},
+        {"date": "2026-12-03", "temp_max_c": 30, "temp_min_c": 23, "precip_mm": 0, "rainy": False},
+    ]}
+    result = attach_weather(_weather_draft(["2026-12-03", "2026-12-02"]), weather)
+    assert result["days"][0]["weather"] == weather["days"][1]
+    assert result["days"][0]["weather_note"] == "Dry, 23 to 30 C"
+    assert result["days"][1]["weather"] == weather["days"][0]
+    assert result["days"][1]["weather_note"] == "Rain likely (12 mm); indoor options preferred"
+
+
+def test_weather_uses_order_when_dates_are_not_both_available():
+    weather = {"available": True, "days": [
+        {"date": "2026-12-02", "temp_max_c": 31, "temp_min_c": 24, "precip_mm": 0, "rainy": False},
+    ]}
+    result = attach_weather(_weather_draft([None]), weather)
+    assert result["days"][0]["weather"]["date"] == "2026-12-02"
+
+
+def test_weather_outside_forecast_window_is_not_assigned():
+    weather = {"available": True, "days": [
+        {"date": "2026-12-02", "temp_max_c": 31, "temp_min_c": 24, "precip_mm": 0, "rainy": False},
+    ]}
+    result = attach_weather(_weather_draft(["2026-12-12"]), weather)
+    assert result["days"][0]["weather"] is None
+    assert result["days"][0]["weather_note"] is None
+
+
+def test_unavailable_weather_clears_model_supplied_forecast():
+    result = attach_weather(_weather_draft(["2026-12-02"]), {"available": False, "reason": "Date is outside the forecast window.", "days": []})
+    assert result["days"][0]["weather"] is None
+    assert result["days"][0]["weather_note"] is None
 
 
 def test_prompt_cleans_guide_text_without_changing_passages():
