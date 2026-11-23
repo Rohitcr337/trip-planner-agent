@@ -15,6 +15,14 @@ TIME_SLOTS = {
     "packed": ("morning", "afternoon", "evening", "evening"),
 }
 OUTDOOR_TERMS = ("beach", "fort", "garden", "hill", "waterfall", "park", "lake", "outdoor")
+INDOOR_WORDS = (
+    "museum", "gallery", "palace", "temple", "interior", "mall", "aquarium",
+    "cinema", "restaurant", "cafe", "church", "library", "market hall",
+)
+OUTDOOR_WORDS = (
+    "beach", "fort", "park", "lake", "trek", "viewpoint", "garden",
+    "island", "waterfall",
+)
 BANNED_NAME_STARTS = {
     "a", "an", "and", "as", "at", "but", "by", "famous", "for", "from",
     "here", "if", "in", "indian", "it", "local", "many", "most", "now",
@@ -391,6 +399,7 @@ class FakeModel:
         self.request = dict(request)
         self.passages: list[dict[str, Any]] = []
         self.costs: dict[str, Any] = {}
+        self.weather: dict[str, Any] = {}
 
     def set_passages(
         self, passages: list[dict[str, Any]], primary_count: int | None = None
@@ -400,6 +409,9 @@ class FakeModel:
 
     def set_costs(self, costs: dict[str, Any]) -> None:
         self.costs = dict(costs)
+
+    def set_weather(self, weather: dict[str, Any]) -> None:
+        self.weather = dict(weather)
 
     def __call__(self, prompt: str) -> str:
         if "Parse the user's trip request" in prompt:
@@ -433,6 +445,11 @@ class FakeModel:
             for item in fallback:
                 if not any(_names_overlap(item["name"], existing["name"]) for existing in items):
                     items.append(item)
+        rainy_days = {
+            day_number
+            for day_number in range(1, days + 1)
+            if self._rainy_day(day_number, start)
+        }
         items = [
             item for item in items
             if not _matches_avoid(item["name"], avoid)
@@ -441,14 +458,25 @@ class FakeModel:
             item for item in items
             if kind_from_section(item["passage"].get("section")) == "food"
         ]
-        items = items[:target_total]
         day_rows = []
         stop_total = 0.0
         used_names: set[str] = set()
+        remaining_items = list(items)
+        assigned: dict[int, list[dict[str, Any]]] = {number: [] for number in range(1, days + 1)}
+        allocation_order = sorted(range(1, days + 1), key=lambda number: (number not in rainy_days, number))
+        for _ in range(target_per_day):
+            for day_number in allocation_order:
+                candidates = list(remaining_items)
+                if day_number in rainy_days:
+                    candidates.sort(key=lambda item: self._outdoor(item) is not False)
+                if not candidates:
+                    continue
+                selected = candidates[0]
+                assigned[day_number].append(selected)
+                remaining_items.remove(selected)
         for day_number in range(1, days + 1):
-            day_items = items[day_number - 1::days]
             day_items = [
-                item for item in day_items
+                item for item in assigned[day_number]
                 if item["name"].casefold() not in used_names
             ]
             if food_interest and food_items:
@@ -477,7 +505,6 @@ class FakeModel:
                 kind = kind_from_section(passage.get("section"))
                 if kind == "food":
                     time_slot = "evening"
-                context = f"{item['name']} {description}".casefold()
                 is_food = kind == "food"
                 if kind == "food":
                     raw_cost = self.costs.get("meal_budget")
@@ -493,11 +520,7 @@ class FakeModel:
                 cost = float(raw_cost) if raw_cost is not None else 0.0
                 used_names.add(item["name"].casefold())
                 stop_total += cost
-                outdoor: bool | None = None
-                if any(term in context for term in OUTDOOR_TERMS):
-                    outdoor = True
-                elif any(term in context for term in ("indoor", "museum", "gallery", "interior")):
-                    outdoor = False
+                outdoor = self._outdoor(item)
                 stops.append({
                     "name": item["name"],
                     "area": _area_from_passage(description, city),
@@ -521,6 +544,30 @@ class FakeModel:
             "total_est_cost_inr": stop_total,
             "assumptions": assumptions,
         }, ensure_ascii=False)
+
+    def _rainy_day(self, day_number: int, start: date | None) -> bool:
+        if not self.weather.get("available"):
+            return False
+        forecast_days = self.weather.get("days") or []
+        planned_date = (start + timedelta(days=day_number - 1)).isoformat() if start else None
+        if planned_date and any(item.get("date") for item in forecast_days):
+            forecast = next((item for item in forecast_days if item.get("date") == planned_date), None)
+        else:
+            forecast = forecast_days[day_number - 1] if day_number <= len(forecast_days) else None
+        return bool(forecast and forecast.get("rainy"))
+
+    @staticmethod
+    def _outdoor(item: dict[str, Any]) -> bool | None:
+        if kind_from_section(item["passage"].get("section")) == "food":
+            return False
+        first_sentence = re.split(r"(?<=[.!?])\s+", item.get("description", ""), maxsplit=1)[0]
+        searchable = f"{item.get('name', '')} {first_sentence}".casefold()
+        contains = lambda word: re.search(rf"\b{re.escape(word)}\b", searchable) is not None
+        if any(contains(word) for word in OUTDOOR_WORDS):
+            return True
+        if any(contains(word) for word in INDOOR_WORDS):
+            return False
+        return None
 
 
 def create_fake_model(request: dict[str, Any]) -> FakeModel:

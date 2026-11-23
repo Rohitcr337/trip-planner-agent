@@ -102,7 +102,8 @@ def intake(state: TripState) -> TripState:
         "  interests    — non-empty list of strings\n"
         "  style        — one of: relaxed, packed\n"
         "  start_date   — optional ISO date (YYYY-MM-DD) if the user gave one; "
-        "otherwise null\n\n"
+        "otherwise null\n"
+        "  avoid        — optional list of place names to avoid; otherwise []\n\n"
         f"User input:\n{json.dumps(user_input, ensure_ascii=False)}"
     )
 
@@ -217,6 +218,7 @@ def fetch_node(state: TripState) -> TripState:
     fake_model = state.get("fake_model")
     if fake_model is not None:
         fake_model.set_costs(city_costs)
+        fake_model.set_weather(weather)
 
     result = dict(state)
     result["live_data"] = {"weather": weather, "costs": city_costs, "city": city}
