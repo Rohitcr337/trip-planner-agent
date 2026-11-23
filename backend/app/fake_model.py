@@ -39,7 +39,10 @@ _CONTEXT_PLACE = re.compile(
     r"((?:[A-Z][A-Za-z’'-]*|and|&)(?:\s+(?:[A-Z][A-Za-z’'-]*|and|&|of|the)){0,3})"
 )
 ACTIVITY_SECTIONS = {"see", "do", "eat", "drink"}
-EVENT_WORDS = ("festival", "procession", "parade", "fair", "ceremony")
+EVENT_WORDS = (
+    "festival", "procession", "parade", "fair", "ceremony",
+    "commences", "annually",
+)
 MONTH_NAMES = (
     "january", "february", "march", "april", "may", "june",
     "july", "august", "september", "october", "november", "december",
@@ -65,6 +68,11 @@ _DISTRICT_PATTERNS = (
         r"\b([A-Z][A-Za-z'’.-]*(?:\s+[A-Z][A-Za-z'’.-]*){0,2})\s+(?:district|taluka)\b",
         re.IGNORECASE,
     ),
+)
+
+CONNECTIVE_STARTS = (
+    "it", "they", "this", "these", "those", "then", "he", "she",
+    "also", "here", "there",
 )
 
 
@@ -97,7 +105,7 @@ def _valid_name(value: str, city: str) -> str | None:
         words.pop(0)
     name = " ".join(words)
     words = name.split()
-    if not 1 <= len(words) <= 5 or name.casefold() == city.casefold():
+    if not 1 <= len(words) <= 6 or name.casefold() == city.casefold():
         return None
     folded_name = name.casefold()
     if folded_name in NON_ATTRACTION_NAMES:
@@ -130,6 +138,18 @@ def _fallback_candidates(text: str, city: str, passage_index: int, passage: dict
         if name and _area_from_passage(name, city) == city:
             found.append((match.start(), name))
 
+    section = clean_text(str(passage.get("section") or "").casefold())
+    if section in {"eat", "drink"}:
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        description = next(
+            (sentence for sentence in sentences if len(sentence.split()) >= 4),
+            "",
+        )
+        if description:
+            food_name = _valid_name(f"{city} Restaurants", city)
+            if food_name:
+                found.append((0, food_name))
+
     items: list[dict[str, Any]] = []
     seen: set[str] = set()
     sentences = re.split(r"(?<=[.!?])\s+", text)
@@ -138,7 +158,10 @@ def _fallback_candidates(text: str, city: str, passage_index: int, passage: dict
             continue
         sentence = next((part for part in sentences if name.casefold() in part.casefold()), text)
         description = _clean_excerpt(sentence)
-        if _skip_item(name, description) or not _valid_excerpt(description):
+        if section in {"eat", "drink"} and description and len(description.split()) >= 4:
+            sentence = description
+        minimum_words = 4 if section in {"eat", "drink"} else 6
+        if _skip_item(name, description) or len(re.findall(r"[A-Za-z0-9]+", description)) < minimum_words:
             continue
         items.append({
             "name": name,
@@ -164,7 +187,9 @@ def _passage_items(passage: dict[str, Any], passage_index: int, city: str) -> li
         raw_name, raw_description = segment.split("—", 1)
         name = _valid_name(raw_name, city)
         description = _clean_excerpt(raw_description)
-        if name and not _skip_item(name, description) and _valid_excerpt(description):
+        minimum_words = 4 if section in {"eat", "drink"} else 6
+        if (name and not _skip_item(name, description)
+                and len(re.findall(r"[A-Za-z0-9]+", description)) >= minimum_words):
             items.append({
                 "name": name,
                 "description": description,
@@ -177,7 +202,8 @@ def _passage_items(passage: dict[str, Any], passage_index: int, city: str) -> li
 
 
 def _all_items(
-    passages: list[dict[str, Any]], city: str, passage_offset: int = 0
+    passages: list[dict[str, Any]], city: str, passage_offset: int = 0,
+    interests: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     seen_excerpts: set[str] = set()
@@ -188,7 +214,38 @@ def _all_items(
                     and not any(_names_overlap(item["name"], existing["name"]) for existing in items)):
                 items.append(item)
                 seen_excerpts.add(excerpt_key)
-    return items
+    return _rank_items(items, interests or [])
+
+
+def _rank_items(items: list[dict[str, Any]], interests: list[str]) -> list[dict[str, Any]]:
+    interest_words: list[str] = []
+    for interest in interests:
+        for word in re.findall(r"[a-z0-9]+", interest.casefold()):
+            if len(word) > 4 and word.endswith("ies"):
+                word = word[:-3] + "y"
+            elif len(word) > 4 and word.endswith("es"):
+                word = word[:-2]
+            elif len(word) > 3 and word.endswith("s"):
+                word = word[:-1]
+            if word:
+                interest_words.append(word)
+
+    def score(item: dict[str, Any]) -> tuple[int, int]:
+        text = f"{item['name']} {item['description']}".casefold()
+        words = set(re.findall(r"[a-z0-9]+", text))
+        normalized: set[str] = set()
+        for word in words:
+            if len(word) > 4 and word.endswith("ies"):
+                word = word[:-3] + "y"
+            elif len(word) > 4 and word.endswith("es"):
+                word = word[:-2]
+            elif len(word) > 3 and word.endswith("s"):
+                word = word[:-1]
+            normalized.add(word)
+        matches = sum(word in normalized for word in set(interest_words))
+        return (-matches, 0)
+
+    return sorted(items, key=score)
 
 
 def _names_overlap(first: str, second: str) -> bool:
@@ -270,10 +327,15 @@ def _skip_item(name: str, description: str) -> bool:
         return True
 
     first_sentence = re.split(r"[.!?]", description, maxsplit=1)[0].casefold()
+    first_word = first_sentence.strip().split(" ", 1)[0].strip(".,;:")
+    if first_word in CONNECTIVE_STARTS:
+        return True
     has_event_word = any(
         re.search(rf"\b{re.escape(word)}\b", first_sentence)
         for word in EVENT_WORDS
     )
+    if has_event_word:
+        return True
     has_date_language = (
         any(re.search(rf"\b{month}\b", first_sentence) for month in MONTH_NAMES)
         or "annually" in first_sentence
@@ -336,13 +398,16 @@ class FakeModel:
         slots = TIME_SLOTS.get(style, TIME_SLOTS["relaxed"])
         start_date = self.request.get("start_date")
         start = date.fromisoformat(start_date) if start_date else None
-        primary = _all_items(self.passages[:self.primary_count], city)
+        primary = _all_items(
+            self.passages[:self.primary_count], city, interests=interests
+        )
         target_per_day = len(slots)
         target_total = days * target_per_day
         items = list(primary)
         if len(items) < target_total:
             fallback = _all_items(
-                self.passages[self.primary_count:], city, passage_offset=self.primary_count
+                self.passages[self.primary_count:], city,
+                passage_offset=self.primary_count, interests=interests
             )
             for item in fallback:
                 if not any(_names_overlap(item["name"], existing["name"]) for existing in items):

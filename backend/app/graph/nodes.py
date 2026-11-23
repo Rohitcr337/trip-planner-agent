@@ -7,6 +7,7 @@ Each node logs: node name, short input, short output, seconds taken.
 """
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -135,6 +136,13 @@ def retrieve_node(state: TripState) -> TripState:
     interests = request.get("interests", [])
     query = " ".join([destination, *interests])
     queries = [query, *interests]
+    food_words = {"food", "eat", "restaurant", "cuisine", "dining"}
+    if any(
+        interest_word.casefold() in food_words
+        for interest in interests
+        for interest_word in re.findall(r"[a-z]+", interest.casefold())
+    ):
+        queries.append("restaurants eat dining cuisine")
     ranked = []
     for query_index, retrieval_query in enumerate(queries):
         for rank, passage in enumerate(

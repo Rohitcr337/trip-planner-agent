@@ -29,14 +29,14 @@ def test_retrieve_node_builds_query_and_writes_passages():
     food = {"text": "A meal", "section": "Eat", "source_url": "b"}
     with patch(
         "backend.app.graph.nodes.retrieve",
-        side_effect=[[fort], [food], [fort]],
+        side_effect=[[fort], [food], [fort], [food]],
     ) as mocked:
         result = retrieve_node(state)
 
     assert mocked.call_args_list[0].args == ("Jaipur", "Jaipur forts food")
     assert mocked.call_args_list[0].kwargs == {"k": 8}
     assert [call.args[1] for call in mocked.call_args_list] == [
-        "Jaipur forts food", "forts", "food",
+        "Jaipur forts food", "forts", "food", "restaurants eat dining cuisine",
     ]
     assert result["passages"] == [fort, food]
 
