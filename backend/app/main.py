@@ -14,11 +14,12 @@ import os
 import time
 from collections.abc import Iterator
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, ValidationError
 from starlette.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.app.auth import Credentials, CurrentUser, current_user, login, logout, register
 from backend.app.graph.build import intake_graph, planning_graph
 from backend.app.graph.state import TripState
 from backend.app.fake_model import create_fake_model
@@ -63,6 +64,26 @@ class IntakeRequest(BaseModel):
 class IntakeResponse(BaseModel):
     """Validated and structured trip request."""
     request: dict
+
+
+@app.post("/auth/register", status_code=201)
+def auth_register(credentials: Credentials):
+    return register(credentials)
+
+
+@app.post("/auth/login")
+def auth_login(credentials: Credentials):
+    return login(credentials)
+
+
+@app.post("/auth/logout")
+def auth_logout(user: CurrentUser, authorization: str | None = Header(default=None)):
+    return logout(user, authorization)
+
+
+@app.get("/auth/me")
+def auth_me(user: CurrentUser):
+    return user
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
