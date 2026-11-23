@@ -16,6 +16,9 @@ trip form -> intake -> retrieve guide passages -> fetch weather/costs
 - Demo mode with deterministic sample plans and no model-provider call.
 - Weather and estimated cost data when configured and available.
 - Itinerary checks, revision feedback, unresolved warnings and stop coordinates.
+- Email and password accounts with hashed passwords and bearer-token sessions.
+- Saved trips with a draft-to-approved flow: save a plan, approve it, list, reopen and delete trips private to their owner.
+- Live planning requires login and has a per-user daily allowance; demo mode stays open.
 - React UI with progress streaming, cost summary, map, citations, checks and stop swapping.
 
 ## Tech stack
@@ -31,7 +34,7 @@ trip form -> intake -> retrieve guide passages -> fetch weather/costs
 
 ## Project structure
 
-- `backend/app/` contains the API, graph nodes, retrieval, checks, tools and sample model.
+- `backend/app/` contains the API, accounts and sessions, saved trips, graph nodes, retrieval, checks, tools and sample model.
 - `backend/tests/` contains backend unit and integration tests plus retrieval cases.
 - `frontend/src/` contains the React application and component tests.
 - `data/guides/` contains fetched guide files used to build the local index.
@@ -65,6 +68,8 @@ $env:DEMO_MODE = "1"
 .\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
+Accounts, sessions and saved trips live in SQLite at `var/cairn.db`; set `DATABASE_PATH` to use another file. Live planning requires a bearer token from `POST /auth/register` or `POST /auth/login`. Each user gets 5 live plans per UTC day by default (`PER_USER_DAILY_CALLS`), in addition to the global cap of 15 model calls per day.
+
 ### Frontend
 
 In a second terminal:
@@ -79,7 +84,7 @@ Open the Vite URL shown in the terminal.
 
 ## Demo mode
 
-Set `DEMO_MODE=1` for deterministic offline sample plans. It does not call the model provider; map tiles and any explicitly enabled external weather or place services can still make network requests. Costs in demo and live plans are estimates.
+Set `DEMO_MODE=1` for deterministic offline sample plans. Demo planning needs no login. It does not call the model provider; map tiles and any explicitly enabled external weather or place services can still make network requests. Costs in demo and live plans are estimates.
 
 ## Tests
 
@@ -105,12 +110,12 @@ The easy set puts 20 of 20 answerable questions in the top 4, with 18 of 20 firs
 - Only three destinations are supported.
 - Costs are estimates, not live prices.
 - Retrieval is word-based rather than neural.
-- The model provider has a small daily free-tier quota.
-- There are no user accounts yet.
+- The model provider has a small daily free-tier quota; live planning is capped per user and globally.
+- Accounts and saved trips are available through the API; the frontend does not have an account screen yet.
 
 ## Roadmap
 
-Accounts and an approval step are planned, along with Docker packaging and neural embeddings.
+Docker packaging and neural embeddings are planned.
 
 ## Data note
 
