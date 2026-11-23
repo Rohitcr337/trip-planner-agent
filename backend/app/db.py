@@ -36,6 +36,19 @@ def initialize(connection: sqlite3.Connection) -> None:
             created_at TEXT NOT NULL,
             expires_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS trips (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            request_json TEXT NOT NULL,
+            draft_json TEXT NOT NULL,
+            checks_json TEXT NOT NULL,
+            cost_json TEXT NOT NULL,
+            demo INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            approved_at TEXT
+        );
         """
     )
     connection.commit()

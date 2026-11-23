@@ -15,6 +15,7 @@ import time
 from collections.abc import Iterator
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi import Request
 from pydantic import BaseModel, ValidationError
 from starlette.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +28,14 @@ from backend.app.checks import trip_cost_breakdown
 from backend.app.quota import ModelCallLimitReached, limit_reached
 from backend.app.schemas import TripRequest
 from backend.app.tools import CITY_COORDS
+from backend.app.trips import (
+    approve_trip,
+    create_trip,
+    delete_trip,
+    get_trip,
+    list_trips,
+    parse_save_body,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -84,6 +93,32 @@ def auth_logout(user: CurrentUser, authorization: str | None = Header(default=No
 @app.get("/auth/me")
 def auth_me(user: CurrentUser):
     return user
+
+
+@app.post("/trips", status_code=201)
+async def save_trip(request: Request, user: CurrentUser):
+    body = await parse_save_body(request)
+    return create_trip(user, body)
+
+
+@app.post("/trips/{trip_id}/approve")
+def approve_saved_trip(trip_id: int, user: CurrentUser):
+    return approve_trip(user, trip_id)
+
+
+@app.get("/trips")
+def saved_trips(user: CurrentUser, status: str | None = None):
+    return {"trips": list_trips(user, status)}
+
+
+@app.get("/trips/{trip_id}")
+def saved_trip(trip_id: int, user: CurrentUser):
+    return get_trip(user, trip_id)
+
+
+@app.delete("/trips/{trip_id}", status_code=204)
+def remove_trip(trip_id: int, user: CurrentUser):
+    delete_trip(user, trip_id)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
