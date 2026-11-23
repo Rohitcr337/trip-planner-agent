@@ -1,6 +1,9 @@
 from unittest.mock import patch
 
-from backend.app.checks import check_budget, check_logistics, check_sources, run_checks, trip_cost_breakdown
+from backend.app.checks import (
+    check_budget, check_logistics, check_sources, check_avoid,
+    run_checks, trip_cost_breakdown,
+)
 
 
 def draft(stops=None):
@@ -123,3 +126,18 @@ def test_sources_require_source_or_unverified_and_report_count():
     d["days"][0]["stops"][0]["unverified"] = True
     assert check_sources(d).passed
     assert "1 unverified" in check_sources(d).reason
+
+
+def test_avoid_check_flags_matching_stop_and_run_checks_includes_it():
+    d = draft([{"name": "Amber Fort", "unverified": False, "sources": []}])
+    result = check_avoid(d, {"avoid": ["amber   fort"]})
+    assert not result.passed
+    assert "Amber Fort" in result.reason
+
+    state = {
+        "draft": d,
+        "request": {"destination": "Jaipur", "days": 1, "budget": 1000,
+                    "interests": ["history"], "style": "relaxed", "avoid": ["Amber Fort"]},
+        "live_data": {"costs": COSTS},
+    }
+    assert any(check["name"] == "avoid" for check in run_checks(state))

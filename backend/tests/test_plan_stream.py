@@ -10,6 +10,7 @@ client = TestClient(app)
 REQUEST = {
     "destination": "Jaipur", "days": 1, "budget": 1000,
     "interests": ["history"], "style": "relaxed", "start_date": None,
+    "avoid": ["Hawa Mahal"],
 }
 PASSAGE = {
     "text": "- Amber Fort \u2014 a historic fort in Amer with views of the city.", "section": "See",
@@ -63,6 +64,7 @@ def test_plan_streams_each_graph_step_and_final_result(tmp_path, monkeypatch):
     event_name, result = events[-1]
     assert event_name == "result"
     assert result["draft"]["city"] == "Jaipur"
+    assert result["avoid"] == ["Hawa Mahal"]
     assert result["city_center"] == {"lat": 26.9124, "lon": 75.7873}
     assert result["cost_breakdown"] == {
         "stops_inr": 10.0,

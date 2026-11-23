@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import NamedTuple, Any
 
 from backend.app.tools import get_distance
@@ -174,6 +175,34 @@ def check_sources(draft: dict) -> CheckResult:
     return CheckResult(True, f"Every stop has a source or is marked unverified. {prefix}")
 
 
+def check_avoid(draft: dict, request: dict) -> CheckResult:
+    avoid = request.get("avoid") or []
+    if not avoid:
+        return CheckResult(True, "No places are excluded.")
+
+    def normalise(value: str) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
+
+    matched: list[str] = []
+    for day_index, day in enumerate(_days(draft), 1):
+        number = day.get("day", day_index)
+        for stop in day.get("stops", []):
+            name = str(stop.get("name", "unnamed stop"))
+            normal_name = normalise(name)
+            if any(
+                normal_entry and (
+                    normal_entry == normal_name
+                    or normal_entry in normal_name
+                    or normal_name in normal_entry
+                )
+                for normal_entry in (normalise(str(value)) for value in avoid)
+            ):
+                matched.append(f"Day {number}, {name}")
+    if matched:
+        return CheckResult(False, f"Avoided places appear in the plan: {', '.join(matched)}.")
+    return CheckResult(True, "No avoided places appear in the plan.")
+
+
 def run_checks(state: dict[str, Any]) -> list[dict[str, Any]]:
     draft = state.get("draft")
     if draft is None:
@@ -187,5 +216,6 @@ def run_checks(state: dict[str, Any]) -> list[dict[str, Any]]:
             ("budget", check_budget(draft, request, costs)),
             ("logistics", check_logistics(draft, request, live_data)),
             ("sources", check_sources(draft)),
+            ("avoid", check_avoid(draft, request)),
         )
     ]

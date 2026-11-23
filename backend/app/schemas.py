@@ -28,6 +28,11 @@ class TripRequest(BaseModel):
         default=None,
         description="Optional trip start date as an ISO date (YYYY-MM-DD).",
     )
+    avoid: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description="Place names that should not appear in the itinerary.",
+    )
 
     @field_validator("interests")
     @classmethod
@@ -45,4 +50,21 @@ class TripRequest(BaseModel):
             return date.fromisoformat(v).isoformat()
         except (TypeError, ValueError) as exc:
             raise ValueError("start_date must be an ISO date (YYYY-MM-DD).") from exc
+
+    @field_validator("avoid")
+    @classmethod
+    def avoid_entries_must_be_valid(cls, entries: list[str]) -> list[str]:
+        import re
+
+        cleaned: list[str] = []
+        for entry in entries:
+            if not isinstance(entry, str):
+                raise ValueError("avoid entries must be strings.")
+            value = re.sub(r"\s+", " ", entry.strip())
+            if not value:
+                raise ValueError("avoid entries cannot be empty.")
+            if len(value) > 80:
+                raise ValueError("avoid entries cannot exceed 80 characters.")
+            cleaned.append(value)
+        return cleaned
 

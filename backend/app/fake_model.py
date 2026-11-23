@@ -217,6 +217,21 @@ def _all_items(
     return _rank_items(items, interests or [])
 
 
+def _normalise_place_name(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
+
+
+def _matches_avoid(name: str, avoid: list[str]) -> bool:
+    normal_name = _normalise_place_name(name)
+    for entry in avoid:
+        normal_entry = _normalise_place_name(entry)
+        if normal_entry and (normal_entry == normal_name
+                             or normal_entry in normal_name
+                             or normal_name in normal_entry):
+            return True
+    return False
+
+
 def _rank_items(items: list[dict[str, Any]], interests: list[str]) -> list[dict[str, Any]]:
     interest_words: list[str] = []
     for interest in interests:
@@ -391,6 +406,7 @@ class FakeModel:
         days = int(self.request["days"])
         style = str(self.request.get("style", "relaxed"))
         interests = [str(value).casefold() for value in self.request.get("interests", [])]
+        avoid = [str(value) for value in self.request.get("avoid", [])]
         food_interest = any(
             word in " ".join(interests)
             for word in ("food", "eat", "restaurant", "cuisine", "dining")
@@ -412,6 +428,10 @@ class FakeModel:
             for item in fallback:
                 if not any(_names_overlap(item["name"], existing["name"]) for existing in items):
                     items.append(item)
+        items = [
+            item for item in items
+            if not _matches_avoid(item["name"], avoid)
+        ]
         food_items = [
             item for item in items
             if kind_from_section(item["passage"].get("section")) == "food"

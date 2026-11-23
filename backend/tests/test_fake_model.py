@@ -356,6 +356,26 @@ def test_exact_elliots_beach_name_loses_unclosed_bracket():
     assert _valid_name("Elliots Beach (Besant Nagar", "Chennai") == "Elliots Beach"
 
 
+def test_fake_model_skips_avoided_place():
+    request = {
+        "destination": "Goa", "days": 1, "budget": 5000,
+        "interests": ["history"], "style": "relaxed", "start_date": None,
+        "avoid": ["Fort Aguada"],
+    }
+    fake = create_fake_model(request)
+    fake.set_passages([{
+        "text": "- Fort Aguada — a historic fort with broad views across the coastline.",
+        "section": "See", "source_name": "Guide", "source_url": "https://example.test",
+    }, {
+        "text": "- Chapora — a historic fort with open views across North Goa.",
+        "section": "See", "source_name": "Guide", "source_url": "https://example.test",
+    }])
+    fake.set_costs(COSTS)
+    result = json.loads(fake("draft"))
+    names = [stop["name"] for day in result["days"] for stop in day["stops"]]
+    assert "Fort Aguada" not in names
+
+
 @pytest.mark.parametrize(("name", "description"), [
     ("Zanani-Deodhi", "A procession commences from the city palace."),
     ("Annual Fair", "The event takes place quietly in the old square."),

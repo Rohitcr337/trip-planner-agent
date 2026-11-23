@@ -165,6 +165,14 @@ def test_prompt_cleans_guide_text_without_changing_passages():
     assert state["passages"][0]["text"].startswith("1. **Chapora**")
 
 
+def test_prompt_includes_places_to_avoid():
+    state = _state()
+    state["request"]["avoid"] = ["Amber Fort", "Marina Beach"]
+    prompt = build_draft_prompt(state)
+
+    assert "Do not include these places: Amber Fort, Marina Beach." in prompt
+
+
 def test_prompt_reports_unavailable_weather_without_inventing_it():
     prompt = build_draft_prompt(_state())
 

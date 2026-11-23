@@ -93,6 +93,7 @@ Request:
 - interests: {json.dumps(request.get("interests", []), ensure_ascii=False)}
 - style: {request.get("style")}
 - start date: {request.get("start_date") or "not provided"}
+- avoid: {json.dumps(request.get("avoid", []), ensure_ascii=False)}
 
 Retrieved passages:
 {passage_text}
@@ -105,6 +106,7 @@ Cost estimates (these are estimates, not guaranteed prices):
 
 Rules:
 - Output JSON only and nothing else.
+- Do not include these places: {", ".join(request.get("avoid", [])) if request.get("avoid") else "none"}.
 - Plan exactly the requested number of days.
 - Every stop must list in passage_ids the numbers of the passages that support it, or [] if none do.
 - For each stop, set kind to sight, activity, food, or null, based on the section of its cited passage.

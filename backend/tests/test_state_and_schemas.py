@@ -126,12 +126,41 @@ class TestTripRequestValid:
         )
         assert req.start_date is None
 
+    def test_avoid_entries_are_trimmed_and_collapsed(self):
+        req = TripRequest(
+            destination="Goa",
+            days=2,
+            budget=5000,
+            interests=["beach"],
+            style="relaxed",
+            avoid=["  Amber   Fort  ", "Marina   Beach"],
+        )
+        assert req.avoid == ["Amber Fort", "Marina Beach"]
+
 
 # ---------------------------------------------------------------------------
 # TripRequest — invalid cases
 # ---------------------------------------------------------------------------
 
 class TestTripRequestInvalid:
+    def test_rejects_more_than_20_avoid_entries(self):
+        with pytest.raises(ValidationError) as exc:
+            TripRequest(
+                destination="Goa", days=1, budget=100,
+                interests=["beach"], style="relaxed",
+                avoid=[f"Place {index}" for index in range(21)],
+            )
+        assert "avoid" in str(exc.value).lower()
+
+    def test_rejects_empty_or_overlong_avoid_entry(self):
+        for avoid in (["   "], ["x" * 81]):
+            with pytest.raises(ValidationError) as exc:
+                TripRequest(
+                    destination="Goa", days=1, budget=100,
+                    interests=["beach"], style="relaxed", avoid=avoid,
+                )
+            assert "avoid" in str(exc.value).lower()
+
     def test_rejects_unsupported_destination(self):
         with pytest.raises(ValidationError) as exc_info:
             TripRequest(

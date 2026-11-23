@@ -175,6 +175,7 @@ def _planning_event_stream(request: TripRequest, demo: bool = False) -> Iterator
             "checks": current.get("checks", []),
             "revisions": current.get("revisions", 0),
             "unresolved": current.get("unresolved", []),
+            "avoid": request.avoid,
             "costs_are_estimates": True,
             "demo": demo,
         })

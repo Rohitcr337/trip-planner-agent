@@ -18,11 +18,11 @@ COSTS = {
 }
 
 
-def itinerary(cost=10):
+def itinerary(cost=10, name="Amber Fort"):
     return json.dumps({
         "city": "Jaipur",
         "days": [{"day": 1, "date": None, "stops": [{
-            "name": "Amber Fort", "area": "Amer", "time_slot": "morning",
+            "name": name, "area": "Amer", "time_slot": "morning",
             "duration_minutes": 120, "est_cost_inr": cost, "notes": "Guide details vary.",
             "outdoor": False, "passage_ids": [],
         }], "weather_note": None}],
@@ -96,6 +96,34 @@ def test_invalid_revision_keeps_previous_draft_and_counts_revision():
     assert result["draft"] == previous
     assert result["revisions"] == 1
     assert any("previous draft retained" in note for note in result["feedback"])
+
+
+def test_avoid_check_flags_draft_and_revision_prompt_requests_removal():
+    request = {**REQUEST, "avoid": ["Amber Fort"]}
+    intake = json.dumps(request)
+    prompts = []
+
+    def answer(prompt):
+        prompts.append(prompt)
+        if len(prompts) == 1:
+            return intake
+        if len(prompts) == 2:
+            return itinerary(10, "Amber Fort")
+        return itinerary(10, "Jaigarh Fort")
+
+    initial = initial_state()
+    initial["user_input"] = {"raw": "one day in Jaipur"}
+    with patch("backend.app.graph.nodes.ask", side_effect=answer) as ask, \
+         patch("backend.app.graph.nodes.retrieve", return_value=[]), \
+         patch("backend.app.graph.nodes.get_weather", return_value={"available": True, "days": []}), \
+         patch("backend.app.graph.nodes.load_costs", return_value=COSTS), \
+         patch("backend.app.graph.nodes.geocode", return_value=None):
+        result = build_planning_graph().invoke(initial)
+
+    assert result["revisions"] == 1
+    assert "Amber Fort" not in str(result["draft"])
+    assert "Amber Fort" in prompts[2]
+    assert ask.call_count == 3
 
 
 def test_invalid_initial_draft_ends_without_revision():
