@@ -12,6 +12,7 @@ import ItineraryTimeline from "./components/ItineraryTimeline.jsx";
 import CostSummary from "./components/CostSummary.jsx";
 import MapView from "./components/MapView.jsx";
 import ChecksPanel from "./components/ChecksPanel.jsx";
+import SavePlanActions from "./components/SavePlanActions.jsx";
 
 const HOME_PATHS = new Set(["/", "/index.html"]);
 
@@ -52,7 +53,7 @@ function Planner() {
   };
 
   const handleFormRequestChange = useCallback((request) => setFormRequest(request), []);
-  const hasFormChanges = Boolean(plan.result && formRequest && requestKey(formRequest) !== requestKey(plan.request));
+  const hasFormChanges = Boolean(plan.result && (!formRequest || requestKey(formRequest) !== requestKey(plan.request)));
 
   const replanWithAvoid = (nextAvoid) => {
     if (!plan.request || swapCount >= 10 && nextAvoid.length > avoid.length) return;
@@ -140,6 +141,7 @@ function Planner() {
               <CostSummary breakdown={plan.result?.cost_breakdown ?? null} loading={plan.status === "planning"} />
               {plan.result && (
                 <>
+                  {plan.status === "complete" && <SavePlanActions request={plan.request} result={plan.result} formChanged={hasFormChanges} />}
                   <MapView key={plan.result.draft?.city} draft={plan.result.draft} cityCenter={plan.result.city_center} />
                   <ChecksPanel checks={plan.result.checks} revisions={plan.result.revisions} />
                 </>

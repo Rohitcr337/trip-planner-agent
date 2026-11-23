@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { API_URL, createEventParser, fetchOptions, MESSAGES, streamPlan } from "../api.js";
+import { API_URL, approveTrip, createEventParser, createTrip, fetchOptions, MESSAGES, streamPlan } from "../api.js";
+import { clearSession, setSession } from "../auth.js";
 
 const request = { destination: "Jaipur", days: 2, budget: 10000, interests: ["history"], style: "relaxed", start_date: null };
 const options = { cities: ["Jaipur", "Chennai", "Goa"], destinations: [{ name: "Jaipur", lat: 26.9, lon: 75.8 }, { name: "Chennai", lat: 13.1, lon: 80.3 }, { name: "Goa", lat: 15.5, lon: 73.8 }], styles: ["relaxed", "packed"], day_range: { min: 1, max: 7 }, interest_suggestions: ["history", "food"] };
@@ -139,5 +140,35 @@ describe("fetchOptions", () => {
     await expect(fetchOptions()).resolves.toEqual({ ok: false, message: MESSAGES.optionsFailed });
     fetch.mockRejectedValue(new TypeError("Failed to fetch"));
     await expect(fetchOptions()).resolves.toEqual({ ok: false, message: MESSAGES.unreachable });
+  });
+});
+
+describe("saved trip requests", () => {
+  it("creates an authenticated trip without planning-only fields and approves it", async () => {
+    setSession("session-token");
+    const created = { id: 17, status: "draft" };
+    mockFetch(new Response(JSON.stringify(created), { status: 201 }));
+    const draft = { city: "Jaipur", days: [] };
+    const outcome = await createTrip(
+      { ...request, avoid: ["Amber Fort"] },
+      { draft, checks: [], cost_breakdown: { estimate_inr: 500 }, demo: false },
+    );
+    expect(outcome).toEqual({ ok: true, status: 201, data: created });
+    expect(fetch).toHaveBeenCalledWith(`${API_URL}/trips`, expect.objectContaining({
+      method: "POST",
+      headers: expect.objectContaining({ Authorization: "Bearer session-token" }),
+      body: JSON.stringify({
+        request,
+        result: { draft, checks: [], cost_breakdown: { estimate_inr: 500 }, demo: false },
+      }),
+    }));
+
+    mockFetch(new Response(JSON.stringify({ ...created, status: "approved" })));
+    await expect(approveTrip(created.id)).resolves.toMatchObject({ ok: true, data: { status: "approved" } });
+    expect(fetch).toHaveBeenLastCalledWith(`${API_URL}/trips/17/approve`, expect.objectContaining({
+      method: "POST",
+      headers: expect.objectContaining({ Authorization: "Bearer session-token" }),
+    }));
+    clearSession();
   });
 });

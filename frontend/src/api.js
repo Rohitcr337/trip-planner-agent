@@ -229,3 +229,24 @@ export function fetchMe() {
   if (!getToken()) return Promise.resolve({ ok: false, message: "" });
   return apiRequest("/auth/me", { auth: true });
 }
+
+export function createTrip(request, result) {
+  const { avoid: _avoid, ...tripRequest } = request || {};
+  return apiRequest("/trips", {
+    method: "POST",
+    auth: true,
+    body: {
+      request: tripRequest,
+      result: {
+        draft: result?.draft,
+        checks: result?.checks || [],
+        cost_breakdown: result?.cost_breakdown || {},
+        demo: result?.demo === true,
+      },
+    },
+  });
+}
+
+export function approveTrip(tripId) {
+  return apiRequest(`/trips/${encodeURIComponent(tripId)}/approve`, { method: "POST", auth: true });
+}
