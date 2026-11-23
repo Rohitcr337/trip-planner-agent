@@ -209,6 +209,11 @@ def _all_items(
     seen_excerpts: set[str] = set()
     for passage_index, passage in enumerate(passages, start=passage_offset):
         for item in _passage_items(passage, passage_index, city):
+            cleaned_name = _valid_name(item["name"], city)
+            if cleaned_name is None:
+                continue
+            item = dict(item)
+            item["name"] = cleaned_name
             excerpt_key = _normalise_excerpt(item["description"])
             if (excerpt_key not in seen_excerpts
                     and not any(_names_overlap(item["name"], existing["name"]) for existing in items)):

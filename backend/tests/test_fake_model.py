@@ -356,6 +356,21 @@ def test_exact_elliots_beach_name_loses_unclosed_bracket():
     assert _valid_name("Elliots Beach (Besant Nagar", "Chennai") == "Elliots Beach"
 
 
+def test_full_fallback_path_cleans_elliots_beach_name():
+    items = _passage_items({
+        "text": "So go out for a stroll during the night on Marina beach and "
+                "Elliots Beach (Besant Nagar.",
+        "section": "Do",
+    }, 0, "Chennai")
+    names = [item["name"] for item in _all_items([{
+        "text": "So go out for a stroll during the night on Marina beach and "
+                "Elliots Beach (Besant Nagar.",
+        "section": "Do",
+    }], "Chennai")]
+    assert names
+    assert all("(" not in name or name.endswith(")") for name in names)
+
+
 def test_fake_model_skips_avoided_place():
     request = {
         "destination": "Goa", "days": 1, "budget": 5000,
