@@ -23,7 +23,7 @@ describe("branding", () => {
     render(<App />);
     expect(screen.getByRole("heading", { level: 1, name: "Trip plans, traced to their sources." })).toBeTruthy();
     expect(screen.getByText("Itineraries built from travel guides, checked against your budget and travel times.")).toBeTruthy();
-    expect(screen.getByText("Costs are estimates. Check details before you book.")).toBeTruthy();
+    expect(screen.getByText("Costs are estimates. Check details before you book. Weather data: Open-Meteo.")).toBeTruthy();
   });
 
   it("renders a not-found page for unknown paths", () => {

@@ -226,7 +226,7 @@ export default function TripForm({ onSubmit, onRequestChange, planning = false }
   const daysHint = `From ${options.day_range.min} to ${options.day_range.max} days.`;
   const budgetHint = "Total per person, in INR, for the whole trip.";
   const otherHint = "Optional. Separate with commas, for example: street art, cycling.";
-  const dateHint = "Optional. Weather is added when the trip starts within the next 16 days.";
+  const dateHint = "Add a start date to include the forecast.";
 
   return (
     <form noValidate onSubmit={handleSubmit} className="mt-6" aria-describedby={errorList.length ? "trip-errors-title" : undefined}>

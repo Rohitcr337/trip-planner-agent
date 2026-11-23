@@ -18,7 +18,27 @@ describe("ItineraryTimeline", () => {
     }
     expect(screen.getByText("Rs 600", { exact: false })).toBeTruthy();
     expect(screen.getByText("Weather is unavailable.")).toBeTruthy();
+    expect(screen.queryByRole("group", { name: "Weather for day 1" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Planning assumptions" })).toBeTruthy();
+  });
+
+  it("shows accessible rain and dry forecasts with temperatures and rainfall", () => {
+    const weatherDraft = { ...draft, days: [
+      { ...draft.days[0], day: 1, weather: { date: "2026-12-01", temp_max_c: 31, temp_min_c: 24, precip_mm: 12, rainy: true }, weather_note: "Rain likely (12 mm); indoor options preferred" },
+      { ...draft.days[0], day: 2, weather: { date: "2026-12-02", temp_max_c: 30, temp_min_c: 22, precip_mm: 0, rainy: false }, weather_note: "Dry, 22 to 30 C" },
+    ] };
+    render(<ItineraryTimeline draft={weatherDraft} status="complete" />);
+    const rainy = screen.getByRole("group", { name: "Weather for day 1" });
+    expect(within(rainy).getByLabelText("Rain likely")).toBeTruthy();
+    expect(within(rainy).getByLabelText("Temperature 24 to 31 degrees Celsius")).toBeTruthy();
+    expect(within(rainy).getByLabelText("Rainfall 12 millimetres")).toBeTruthy();
+    expect(within(rainy).getByText("Rain likely")).toBeTruthy();
+    expect(screen.getByText("Rain likely (12 mm); indoor options preferred")).toBeTruthy();
+    const dry = screen.getByRole("group", { name: "Weather for day 2" });
+    expect(within(dry).getByLabelText("Dry")).toBeTruthy();
+    expect(within(dry).getByText("22 to 30 °C")).toBeTruthy();
+    expect(within(dry).getByText("0 mm rain")).toBeTruthy();
+    expect(screen.getByText("Dry, 22 to 30 C")).toBeTruthy();
   });
 
   it("numbers stops and renders only the short excerpt, not full source passages", () => {

@@ -43,6 +43,12 @@ describe("validation", () => {
 });
 
 describe("TripForm", () => {
+  it("explains that a start date adds the forecast", async () => {
+    render(<TripForm onSubmit={vi.fn()} />);
+    await screen.findByLabelText("Start date");
+    expect(screen.getByText("Add a start date to include the forecast.")).toBeTruthy();
+  });
+
   it("loads options and presents a linked, focused error summary", async () => {
     const onSubmit = vi.fn();
     render(<TripForm onSubmit={onSubmit} />);

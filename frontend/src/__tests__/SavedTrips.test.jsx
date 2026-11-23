@@ -10,7 +10,7 @@ vi.mock("../api.js", () => ({
 }));
 vi.mock("../components/MapView.jsx", () => ({ default: () => <section aria-label="Saved map">Saved map</section> }));
 
-const draft = { city: "Jaipur", days: [{ day: 1, date: null, stops: [{ name: "Amber Fort", area: "Amer", time_slot: "morning", duration_minutes: 60, est_cost_inr: 500, notes: "Visit the fort.", passage_ids: [], sources: [], unverified: true }] }], total_est_cost_inr: 500, assumptions: [] };
+const draft = { city: "Jaipur", days: [{ day: 1, date: "2026-11-20", weather: { date: "2026-11-20", temp_max_c: 28, temp_min_c: 20, precip_mm: 14, rainy: true }, weather_note: "Rain likely (14 mm); indoor options preferred", stops: [{ name: "Amber Fort", area: "Amer", time_slot: "morning", duration_minutes: 60, est_cost_inr: 500, notes: "Visit the fort.", passage_ids: [], sources: [], unverified: true }] }], total_est_cost_inr: 500, assumptions: [] };
 const trip = { id: 21, title: "Jaipur · 2 days", request: { destination: "Jaipur", days: 2, budget: 10000 }, draft, checks: [{ name: "budget", passed: true, reason: "Within budget." }], cost_breakdown: { complete: true, stops_inr: 500, transport_meals_inr: 1000, stay_inr: 500, estimate_inr: 2000, budget_inr: 10000 }, created_at: "2026-11-20T12:00:00Z", approved_at: "2026-11-20T12:00:00Z", status: "approved" };
 const options = { destinations: [{ name: "Jaipur", lat: 26.9, lon: 75.8 }] };
 
@@ -55,6 +55,8 @@ describe("saved trips", () => {
     expect(screen.getByRole("region", { name: "Saved map" })).toBeTruthy();
     expect(screen.getByText("Trip cost estimate")).toBeTruthy();
     expect(screen.getByText("Plan checks")).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Weather for day 1" })).toBeTruthy();
+    expect(screen.getByText("Rain likely (14 mm); indoor options preferred")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Swap/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Update plan" })).toBeNull();
     expect(fetchTrip).toHaveBeenCalledWith("21");
@@ -84,7 +86,7 @@ describe("saved trips", () => {
     let resolve;
     listTrips.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
     await openTrips();
-    expect(screen.getByRole("status").textContent).toContain("Loading saved trips");
+    expect(await screen.findByText("Loading saved trips…")).toBeTruthy();
     resolve({ ok: false, message: "Trips are unavailable." });
     expect(await screen.findByRole("alert")).toBeTruthy();
     listTrips.mockResolvedValueOnce({ ok: true, data: { trips: [] } });

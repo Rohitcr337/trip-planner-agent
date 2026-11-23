@@ -65,6 +65,18 @@ describe("App", () => {
     expect(document.querySelectorAll("h1")).toHaveLength(1);
   });
 
+  it("explains an unavailable forecast under the plan heading", async () => {
+    streamPlan.mockImplementationOnce(async (_request, onEvent) => onEvent({
+      type: "result",
+      data: { ...result, weather_status: { available: false, reason: "No start date provided; weather not fetched." } },
+    }));
+    render(<App />);
+    await fillAndSubmit();
+    const status = await screen.findByRole("status");
+    expect(status.textContent).toContain("Add a start date to include the forecast.");
+    expect(screen.getByRole("heading", { name: "Your Jaipur itinerary" }).compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("shows planning skeletons and does not show the preview chip for a live result", async () => {
     let finish;
     streamPlan.mockImplementation((_request, onEvent) => new Promise((resolve) => {

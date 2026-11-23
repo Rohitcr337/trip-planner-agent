@@ -17,6 +17,14 @@ import SavedTrips from "./components/SavedTrips.jsx";
 
 const HOME_PATHS = new Set(["/", "/index.html"]);
 
+function weatherUnavailableReason(status) {
+  const reason = String(status?.reason || "").trim();
+  if (!reason) return "Forecast unavailable.";
+  if (/no start date/i.test(reason)) return "Add a start date to include the forecast.";
+  if (/outside (?:the )?forecast window|forecast is unavailable for/i.test(reason)) return "A forecast is not available for those dates.";
+  return `Forecast unavailable: ${reason}`;
+}
+
 function Planner() {
   const [plan, setPlan] = useState({ status: "idle", request: null, steps: [], result: null, message: "" });
   const [formRequest, setFormRequest] = useState(null);
@@ -104,6 +112,9 @@ function Planner() {
             </h2>
             {plan.result?.demo === true && <PreviewChip />}
           </div>
+          {plan.result?.weather_status?.available === false && (
+            <p role="status" className="mt-2 text-small text-text-muted">{weatherUnavailableReason(plan.result.weather_status)}</p>
+          )}
           <div className="mt-6 space-y-8 lg:space-y-12">
             {avoid.length > 0 && (
               <section aria-label="Places to avoid" className="space-y-3">

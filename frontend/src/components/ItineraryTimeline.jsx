@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Clock, Info, MapPin, TriangleAlert } from "lucide-react";
+import { ArrowLeftRight, Clock, Cloud, CloudRain, Info, MapPin, Sun, TriangleAlert } from "lucide-react";
 import { formatDate, formatInr } from "../format.js";
 import SourceBadge from "./SourceBadge.jsx";
 import UnverifiedBadge from "./UnverifiedBadge.jsx";
@@ -89,6 +89,25 @@ export default function ItineraryTimeline({ draft = null, costsAreEstimates = fa
               </div>
               <p className="rounded-pill bg-primary-soft px-3 py-1 text-small text-text">{formatInr(total)} <span className="text-text-muted">est. stops</span></p>
             </div>
+            {day.weather && (() => {
+              const forecast = day.weather;
+              const rainy = forecast.rainy === true;
+              const Icon = rainy ? CloudRain : forecast.precip_mm > 0 ? Cloud : Sun;
+              return (
+                <div role="group" aria-label={`Weather for day ${day.day}`} className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-control bg-surface-muted px-4 py-3 text-small text-text">
+                  <span className="inline-flex items-center gap-2" aria-label={rainy ? "Rain likely" : "Dry"}>
+                    <Icon aria-hidden="true" className="size-5 text-primary" />
+                    {rainy ? "Rain likely" : "Dry"}
+                  </span>
+                  <span aria-label={`Temperature ${forecast.temp_min_c} to ${forecast.temp_max_c} degrees Celsius`}>
+                    {forecast.temp_min_c} to {forecast.temp_max_c} °C
+                  </span>
+                  <span aria-label={`Rainfall ${forecast.precip_mm} millimetres`}>
+                    {forecast.precip_mm} mm rain
+                  </span>
+                </div>
+              );
+            })()}
             {day.weather_note && <p className="mt-3 flex items-start gap-2 rounded-control bg-surface-muted p-3 text-small text-text-muted"><Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{day.weather_note}</p>}
             {day.stops.length ? (
               <ol className="mt-6 space-y-4 border-l border-border pl-4 sm:pl-6">
