@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { streamPlan } from "./api.js";
+import AuthProvider from "./components/AuthProvider.jsx";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
 import NotFound from "./components/NotFound.jsx";
@@ -154,12 +155,14 @@ function Planner() {
 
 export default function App() {
   return (
-    <div className="flex min-h-screen flex-col bg-bg text-text">
-      <Header />
-      <main className="mx-auto w-full max-w-content flex-1 px-4 pb-16 sm:px-6">
-        {HOME_PATHS.has(window.location.pathname) ? <Planner /> : <NotFound />}
-      </main>
-      <Footer />
-    </div>
+    <AuthProvider>
+      <div className="flex min-h-screen flex-col bg-bg text-text">
+        <Header />
+        <main className="mx-auto w-full max-w-content flex-1 px-4 pb-16 sm:px-6">
+          {HOME_PATHS.has(window.location.pathname) ? <Planner /> : <NotFound />}
+        </main>
+        <Footer />
+      </div>
+    </AuthProvider>
   );
 }

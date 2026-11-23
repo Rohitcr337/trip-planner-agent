@@ -1,3 +1,5 @@
+import { clearSession, endSession, getToken, SESSION_ENDED } from "./auth.js";
+
 export const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 
 export const MESSAGES = {
@@ -48,6 +50,10 @@ export async function fetchOptions({ signal } = {}) {
   try {
     const response = await fetch(`${API_URL}/options`, { signal });
     const data = await readJson(response);
+    if (response.status === 401) {
+      endSession();
+      return { ok: false, status: 401, message: SESSION_ENDED };
+    }
     if (!response.ok) return { ok: false, message: statusMessage(response.status, data) };
     if (!validOptions(data)) return { ok: false, message: MESSAGES.optionsFailed };
     return { ok: true, options: data };
@@ -108,10 +114,11 @@ export async function streamPlan(request, onEvent, { signal } = {}) {
   };
 
   let response;
+  const token = getToken();
   try {
     response = await fetch(`${API_URL}/plan`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(request),
       signal,
     });
@@ -120,6 +127,10 @@ export async function streamPlan(request, onEvent, { signal } = {}) {
     return fail(MESSAGES.unreachable);
   }
 
+  if (response.status === 401) {
+    endSession();
+    return fail(SESSION_ENDED);
+  }
   if (!response.ok) return fail(statusMessage(response.status, await readJson(response)));
   if (!response.body) return fail(MESSAGES.badResponse);
 
@@ -173,4 +184,48 @@ export async function streamPlan(request, onEvent, { signal } = {}) {
 
   if (!finished) return fail(MESSAGES.dropped);
   return { ok: gotResult };
+}
+
+function apiRequest(path, { method = "GET", body, auth = false, signal } = {}) {
+  const headers = { Accept: "application/json" };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const token = auth ? getToken() : null;
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  return fetch(`${API_URL}${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
+  }).then(async (response) => {
+    if (response.status === 401) {
+      const sessionEnded = endSession();
+      return { ok: false, status: 401, sessionEnded, message: sessionEnded || auth ? SESSION_ENDED : "Incorrect email or password." };
+    }
+    const data = response.status === 204 ? null : await readJson(response);
+    if (!response.ok) return { ok: false, status: response.status, data, message: statusMessage(response.status, data) };
+    return { ok: true, status: response.status, data };
+  }).catch((error) => {
+    if (isAbort(error)) return { ok: false, aborted: true, message: "" };
+    return { ok: false, message: MESSAGES.unreachable };
+  });
+}
+
+export function registerAccount(email, password) {
+  return apiRequest("/auth/register", { method: "POST", body: { email, password } });
+}
+
+export function loginAccount(email, password) {
+  return apiRequest("/auth/login", { method: "POST", body: { email, password } });
+}
+
+export function logoutAccount() {
+  const response = getToken() ? apiRequest("/auth/logout", { method: "POST", auth: true }) : Promise.resolve({ ok: true, status: 204, data: null });
+  clearSession();
+  return response;
+}
+
+export function fetchMe() {
+  if (!getToken()) return Promise.resolve({ ok: false, message: "" });
+  return apiRequest("/auth/me", { auth: true });
 }
