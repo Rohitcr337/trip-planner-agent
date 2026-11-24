@@ -10,6 +10,11 @@ from backend.app.vector_store import NumpyStore, TfidfEmbedder
 
 logger = logging.getLogger(__name__)
 
+class IndexMissingError(RuntimeError):
+    """Raised when the travel guide index directory is missing."""
+    pass
+
+
 ROOT = Path(__file__).resolve().parents[2]
 INDEX_DIR = ROOT / "index"
 MIN_SIMILARITY = 0.1

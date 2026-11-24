@@ -28,6 +28,11 @@ from backend.app.quota import ModelCallLimitReached, record_model_call
 load_dotenv()
 
 # ── Configuration ────────────────────────────────────────────────────────────
+class ModelUnavailableError(RuntimeError):
+    """Raised when the LLM service is unavailable, times out, or fails client/server checks."""
+    pass
+
+
 _DEFAULT_MODEL = os.getenv("LLM_MODEL", "gemini-1.5-flash")
 _CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "cache")
 
@@ -195,22 +200,22 @@ def ask(prompt: str, model: str | None = None) -> str:
                 if code == 429:
                     delay = _extract_retry_delay(exc)
                     delay_msg = f" Retry delay: {delay}." if delay else " Retry delay not specified."
-                    raise RuntimeError(
+                    raise ModelUnavailableError(
                         f"Gemini API client error: status {code} ({status_text}).{delay_msg} {exc}"
                     ) from exc
-                raise RuntimeError(
+                raise ModelUnavailableError(
                     f"Gemini API client error: status {code} ({status_text}). {exc}"
                 ) from exc
 
             # 2. Check if error is retryable (timeout or 5xx server error)
             if not _is_retryable_error(exc):
-                raise RuntimeError(f"Gemini API error (non-retryable): {exc}") from exc
+                raise ModelUnavailableError(f"Gemini API error (non-retryable): {exc}") from exc
 
             # 3. Retryable error (timeout or 5xx): retry up to _MAX_RETRIES
             if attempt <= _MAX_RETRIES:
                 time.sleep(attempt)
             else:
-                raise RuntimeError(
+                raise ModelUnavailableError(
                     f"Gemini API call failed after {_MAX_RETRIES + 1} attempts. "
                     f"Last error: {exc}"
                 ) from exc

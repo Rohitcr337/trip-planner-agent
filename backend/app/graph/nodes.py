@@ -19,7 +19,7 @@ from backend.app.fake_model import excerpt_for_stop
 from backend.app.graph.state import TripState
 from backend.app.itinerary import Itinerary, Source, build_draft_prompt, kind_from_section
 from backend.app.llm import ask
-from backend.app.retrieve import retrieve, retrieve_activity_passages
+from backend.app.retrieve import INDEX_DIR, IndexMissingError, retrieve, retrieve_activity_passages
 from backend.app.schemas import TripRequest
 from backend.app.tools import geocode, get_weather
 
@@ -128,6 +128,8 @@ def intake(state: TripState) -> TripState:
 def retrieve_node(state: TripState) -> TripState:
     """Retrieve guide passages for the validated destination and interests."""
     t0 = time.perf_counter()
+    if not INDEX_DIR.exists():
+        raise IndexMissingError("Guide index directory is missing")
     request = state.get("request")
     if not request:
         _log("retrieve", "no request", "skipped", time.perf_counter() - t0)
@@ -292,6 +294,10 @@ def _parse_and_validate_draft(raw: str, state: TripState) -> dict:
     """Parse itinerary JSON, validate its schema, and attach retrieved sources."""
     itinerary = Itinerary.model_validate(_extract_json(raw))
     passages = state.get("passages") or []
+    if not passages:
+        assumption = "Little guide material was found for this request, so suggestions are unverified."
+        if assumption not in itinerary.assumptions:
+            itinerary.assumptions.append(assumption)
     for stop in (stop for day in itinerary.days for stop in day.stops):
         valid_ids = sorted(
             {passage_id for passage_id in stop.passage_ids

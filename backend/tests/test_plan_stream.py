@@ -193,7 +193,11 @@ def test_plan_streams_friendly_error_for_unsupported_destination(tmp_path, monke
     assert "text/event-stream" in response.headers["content-type"]
     assert _events(response.text) == [(
         "error",
-        {"message": "That destination isn't available yet. Available now: Jaipur, Chennai, Goa."},
+        {
+            "code": "destination_unavailable",
+            "message": "That destination isn't available yet. Available now: Jaipur, Chennai, Goa.",
+            "retryable": False,
+        },
     )]
     ask.assert_not_called()
 
@@ -207,8 +211,93 @@ def test_plan_stream_hides_internal_errors(tmp_path, monkeypatch):
          patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
         response = client.post("/plan", json=REQUEST, headers=headers)
     events = _events(response.text)
-    assert events[-1] == ("error", {"message": "Planning failed. Please retry."})
+    assert events[-1] == ("error", {"code": "plan_failed", "message": "Planning failed. Please retry.", "retryable": True})
     assert "private transport details" not in response.text
+
+
+def test_plan_stream_reports_model_unavailable(tmp_path, monkeypatch):
+    from backend.app.llm import ModelUnavailableError
+    monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+    headers = _auth_headers(tmp_path, monkeypatch)
+    with patch("backend.app.graph.nodes.ask", side_effect=ModelUnavailableError("upstream 503 error")), \
+         patch("backend.app.graph.nodes.retrieve", return_value=[PASSAGE]), \
+         patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
+         patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
+        response = client.post("/plan", json=REQUEST, headers=headers)
+    events = _events(response.text)
+    assert events[-1] == ("error", {
+        "code": "model_unavailable",
+        "message": "The planning model is temporarily unavailable. Please retry.",
+        "retryable": True,
+    })
+    assert "upstream 503" not in response.text
+
+
+def test_plan_stream_reports_model_unavailable_when_draft_cannot_be_created(tmp_path, monkeypatch):
+    monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+    headers = _auth_headers(tmp_path, monkeypatch)
+    with patch("backend.app.graph.nodes.ask", return_value="not valid json at all"), \
+         patch("backend.app.graph.nodes.retrieve", return_value=[PASSAGE]), \
+         patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
+         patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
+        response = client.post("/plan", json=REQUEST, headers=headers)
+    events = _events(response.text)
+    assert events[-1] == ("error", {
+        "code": "model_unavailable",
+        "message": "The planning model was unable to generate an itinerary. Please retry.",
+        "retryable": True,
+    })
+
+
+def test_plan_stream_reports_quota_reached_during_stream(tmp_path, monkeypatch):
+    monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+    headers = _auth_headers(tmp_path, monkeypatch)
+    with patch("backend.app.graph.nodes.ask", side_effect=quota.ModelCallLimitReached), \
+         patch("backend.app.graph.nodes.retrieve", return_value=[PASSAGE]), \
+         patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
+         patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
+        response = client.post("/plan", json=REQUEST, headers=headers)
+    events = _events(response.text)
+    assert events[-1] == ("error", {
+        "code": "quota_reached",
+        "message": "Daily planning limit reached. Please try again tomorrow.",
+        "retryable": False,
+    })
+
+
+def test_plan_stream_reports_index_missing(tmp_path, monkeypatch):
+    import backend.app.graph.nodes as nodes_module
+    monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(nodes_module, "INDEX_DIR", tmp_path / "nonexistent_index")
+    headers = _auth_headers(tmp_path, monkeypatch)
+    with patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
+         patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
+        response = client.post("/plan", json=REQUEST, headers=headers)
+    events = _events(response.text)
+    assert events[-1] == ("error", {
+        "code": "index_missing",
+        "message": "The travel guide index is not available. Please try again later.",
+        "retryable": False,
+    })
+
+
+def test_no_guide_content_returns_unverified_stops_and_calm_notice(tmp_path, monkeypatch):
+    monkeypatch.setattr(quota, "CACHE_DIR", tmp_path)
+    headers = _auth_headers(tmp_path, monkeypatch)
+    with patch("backend.app.graph.nodes.ask", return_value=DRAFT), \
+         patch("backend.app.graph.nodes.retrieve", return_value=[]), \
+         patch("backend.app.graph.nodes.load_costs", return_value=CITY_COSTS), \
+         patch("backend.app.graph.nodes.geocode", return_value=None), \
+         patch("backend.app.tools.httpx.get", side_effect=AssertionError("unexpected HTTP call")):
+        response = client.post("/plan", json=REQUEST, headers=headers)
+    assert response.status_code == 200
+    events = _events(response.text)
+    event_name, result = events[-1]
+    assert event_name == "result"
+    assert result["notice"] == "Little guide material was found for this request, so suggestions are unverified"
+    stops = result["draft"]["days"][0]["stops"]
+    assert all(stop["unverified"] is True for stop in stops)
+    assert any("unverified" in a.lower() for a in result["draft"]["assumptions"])
 
 
 def test_demo_mode_uses_passage_grounded_plan_without_api_calls(tmp_path, monkeypatch):

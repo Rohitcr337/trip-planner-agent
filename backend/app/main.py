@@ -26,12 +26,14 @@ from backend.app.graph.state import TripState
 from backend.app.fake_model import create_fake_model
 from backend.app.checks import trip_cost_breakdown
 from backend.app.itinerary import attach_weather
+from backend.app.llm import ModelUnavailableError
 from backend.app.quota import (
     ModelCallLimitReached,
     UserModelCallLimitReached,
     limit_reached,
     record_user_model_call,
 )
+from backend.app.retrieve import IndexMissingError
 from backend.app.schemas import TripRequest
 from backend.app.tools import CITY_COORDS
 from backend.app.trips import (
@@ -227,9 +229,23 @@ def _planning_event_stream(
     try:
         updates = planning_graph.stream(initial_state, stream_mode="updates")
         yield from _stream_updates(updates, current, previous)
+        if current.get("draft") is None:
+            logger.warning("Planning failed: draft itinerary could not be created")
+            yield _event("error", {
+                "code": "model_unavailable",
+                "message": "The planning model was unable to generate an itinerary. Please retry.",
+                "retryable": True,
+            })
+            return
         weather = (current.get("live_data") or {}).get("weather") or {}
+        notice = (
+            "Little guide material was found for this request, so suggestions are unverified"
+            if not current.get("passages")
+            else None
+        )
         yield _event("result", {
             "draft": attach_weather(current.get("draft"), weather),
+            "notice": notice,
             "weather_status": {
                 "available": bool(weather.get("available")),
                 "reason": weather.get("reason") or "",
@@ -251,11 +267,34 @@ def _planning_event_stream(
             "demo": demo,
             "remaining_calls": remaining_calls,
         })
-    except ModelCallLimitReached:
-        yield _event("error", {"message": "Daily model call limit reached. Try again tomorrow."})
+    except (ModelCallLimitReached, UserModelCallLimitReached):
+        logger.warning("Planning quota reached")
+        yield _event("error", {
+            "code": "quota_reached",
+            "message": "Daily planning limit reached. Please try again tomorrow.",
+            "retryable": False,
+        })
+    except IndexMissingError:
+        logger.error("Guide index is missing on the server")
+        yield _event("error", {
+            "code": "index_missing",
+            "message": "The travel guide index is not available. Please try again later.",
+            "retryable": False,
+        })
+    except ModelUnavailableError:
+        logger.exception("Model service unavailable")
+        yield _event("error", {
+            "code": "model_unavailable",
+            "message": "The planning model is temporarily unavailable. Please retry.",
+            "retryable": True,
+        })
     except Exception:
-        logger.exception("Planning stream failed")
-        yield _event("error", {"message": "Planning failed. Please retry."})
+        logger.exception("Planning stream failed unexpectedly")
+        yield _event("error", {
+            "code": "plan_failed",
+            "message": "Planning failed. Please retry.",
+            "retryable": True,
+        })
 
 
 def _stream_updates(updates, current: dict, previous: float) -> Iterator[str]:
@@ -290,7 +329,11 @@ def plan(request: dict, authorization: str | None = Header(default=None)):
             return StreamingResponse(
                 iter([_event(
                     "error",
-                    {"message": f"That destination isn't available yet. Available now: {available}."},
+                    {
+                        "code": "destination_unavailable",
+                        "message": f"That destination isn't available yet. Available now: {available}.",
+                        "retryable": False,
+                    },
                 )]),
                 media_type="text/event-stream",
             )
