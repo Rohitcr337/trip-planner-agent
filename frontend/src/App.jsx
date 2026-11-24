@@ -25,8 +25,23 @@ function weatherUnavailableReason(status) {
   return `Forecast unavailable: ${reason}`;
 }
 
+export const ERROR_MESSAGES = {
+  destination_unavailable: "That destination isn't available yet.",
+  model_unavailable: "The planning model is temporarily unavailable. Please retry.",
+  quota_reached: "Daily planning limit reached. Please try again tomorrow.",
+  index_missing: "The travel guide index is not available. Please try again later.",
+  plan_failed: "Planning failed. Please retry.",
+};
+
+export function resolveErrorMessage(data) {
+  if (!data) return "Planning failed. Please retry.";
+  if (data.code === "destination_unavailable" && data.message) return data.message;
+  if (data.code && ERROR_MESSAGES[data.code]) return data.message || ERROR_MESSAGES[data.code];
+  return data.message || "Planning failed. Please retry.";
+}
+
 function Planner() {
-  const [plan, setPlan] = useState({ status: "idle", request: null, steps: [], result: null, message: "" });
+  const [plan, setPlan] = useState({ status: "idle", request: null, steps: [], result: null, message: "", error: null });
   const [formRequest, setFormRequest] = useState(null);
   const [avoid, setAvoid] = useState([]);
   const [swapCount, setSwapCount] = useState(0);
@@ -48,15 +63,16 @@ function Planner() {
     const controller = new AbortController();
     controllerRef.current = controller;
     const planningRequest = { ...request, avoid: nextAvoid };
-    setPlan((current) => ({ ...current, status: "planning", request: planningRequest, steps: [], message: "" }));
+    setPlan((current) => ({ ...current, status: "planning", request: planningRequest, steps: [], message: "", error: null }));
     await streamPlan(planningRequest, ({ type, data }) => {
       if (controller.signal.aborted) return;
       if (type === "step") {
         setPlan((current) => ({ ...current, steps: [...current.steps, data] }));
       } else if (type === "result") {
-        setPlan((current) => ({ ...current, status: "complete", result: data }));
+        setPlan((current) => ({ ...current, status: "complete", result: data, error: null }));
       } else if (type === "error") {
-        setPlan((current) => ({ ...current, status: "error", message: data.message }));
+        const message = resolveErrorMessage(data);
+        setPlan((current) => ({ ...current, status: "error", message, error: data }));
       }
     }, { signal: controller.signal });
   };
@@ -112,6 +128,9 @@ function Planner() {
             </h2>
             {plan.result?.demo === true && <PreviewChip />}
           </div>
+          {plan.result?.notice && (
+            <p role="status" className="mt-2 text-small text-text-muted">{plan.result.notice}</p>
+          )}
           {plan.result?.weather_status?.available === false && (
             <p role="status" className="mt-2 text-small text-text-muted">{weatherUnavailableReason(plan.result.weather_status)}</p>
           )}
@@ -147,7 +166,11 @@ function Planner() {
               <ProgressSteps steps={plan.steps} status={plan.status} message={plan.message} />
             )}
             {plan.status === "error" && (
-              <ErrorAlert title="Your plan could not be completed" message={plan.message} onRetry={() => startPlan(plan.request, avoid)} />
+              <ErrorAlert
+                title="Your plan could not be completed"
+                message={plan.message}
+                onRetry={plan.error?.retryable !== false ? () => startPlan(plan.request, avoid) : undefined}
+              />
             )}
             <div aria-busy={plan.status === "planning"} className={plan.status === "planning" && plan.result ? "opacity-60 transition-opacity" : ""}>
               <CostSummary breakdown={plan.result?.cost_breakdown ?? null} loading={plan.status === "planning"} />

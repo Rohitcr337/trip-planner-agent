@@ -64,7 +64,10 @@ describe("streamPlan", () => {
     mockFetch(new Response(JSON.stringify({ detail: "Daily model call limit reached. Try again tomorrow." }), { status: 429 }));
     const onEvent = vi.fn();
     await streamPlan(request, onEvent);
-    expect(onEvent).toHaveBeenCalledWith({ type: "error", data: { message: MESSAGES.dailyLimit } });
+    expect(onEvent).toHaveBeenCalledWith({
+      type: "error",
+      data: { code: "quota_reached", message: MESSAGES.dailyLimit, retryable: false },
+    });
     expect(MESSAGES.dailyLimit).toMatch(/daily limit reached/i);
   });
 
@@ -88,6 +91,14 @@ describe("streamPlan", () => {
     await expect(streamPlan(request, onEvent)).resolves.toEqual({ ok: false });
     expect(onEvent).toHaveBeenCalledTimes(1);
     expect(onEvent).toHaveBeenCalledWith({ type: "error", data: { message: "Planning failed. Please retry." } });
+  });
+
+  it("delivers structured error events carrying code, message and retryable boolean", async () => {
+    const errorPayload = { code: "index_missing", message: "The travel guide index is not available. Please try again later.", retryable: false };
+    mockFetch(responseFromChunks([`event: error\ndata: ${JSON.stringify(errorPayload)}\n\n`]));
+    const onEvent = vi.fn();
+    await expect(streamPlan(request, onEvent)).resolves.toEqual({ ok: false });
+    expect(onEvent).toHaveBeenCalledWith({ type: "error", data: errorPayload });
   });
 
   it("reports malformed JSON instead of throwing", async () => {

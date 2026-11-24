@@ -77,6 +77,50 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "Your Jaipur itinerary" }).compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("shows the calm notice line when little guide material was found", async () => {
+    streamPlan.mockImplementationOnce(async (_request, onEvent) => onEvent({
+      type: "result",
+      data: { ...result, notice: "Little guide material was found for this request, so suggestions are unverified" },
+    }));
+    render(<App />);
+    await fillAndSubmit();
+    const status = await screen.findByRole("status");
+    expect(status.textContent).toContain("Little guide material was found for this request, so suggestions are unverified");
+  });
+
+  it("maps error codes and hides Retry button when error is not retryable", async () => {
+    streamPlan.mockImplementationOnce(async (_request, onEvent) => onEvent({
+      type: "error",
+      data: { code: "quota_reached", message: "Daily planning limit reached. Please try again tomorrow.", retryable: false },
+    }));
+    render(<App />);
+    await fillAndSubmit();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Daily planning limit reached. Please try again tomorrow.");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("keeps previous plan visible when a subsequent plan errors", async () => {
+    streamPlan
+      .mockImplementationOnce(async (_request, onEvent) => onEvent({ type: "result", data: result }))
+      .mockImplementationOnce(async (_request, onEvent) => onEvent({
+        type: "error",
+        data: { code: "model_unavailable", message: "The planning model is temporarily unavailable. Please retry.", retryable: true },
+      }));
+    render(<App />);
+    await fillAndSubmit();
+    await screen.findByRole("heading", { name: "Amber Fort" });
+
+    // Submit a second planning request
+    fireEvent.click(screen.getByRole("button", { name: "Plan my trip" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("The planning model is temporarily unavailable. Please retry.");
+    // The previous plan's stop is still visible
+    expect(screen.getByRole("heading", { name: "Amber Fort" })).toBeTruthy();
+    // And retry button is available since retryable is true
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
   it("shows planning skeletons and does not show the preview chip for a live result", async () => {
     let finish;
     streamPlan.mockImplementation((_request, onEvent) => new Promise((resolve) => {

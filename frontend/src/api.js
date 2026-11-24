@@ -10,6 +10,14 @@ export const MESSAGES = {
   optionsFailed: "Trip options could not be loaded. Please retry.",
 };
 
+export const ERROR_MESSAGES = {
+  destination_unavailable: "That destination isn't available yet.",
+  model_unavailable: "The planning model is temporarily unavailable. Please retry.",
+  quota_reached: "Daily planning limit reached. Please try again tomorrow.",
+  index_missing: "The travel guide index is not available. Please try again later.",
+  plan_failed: "Planning failed. Please retry.",
+};
+
 const PLAN_EVENTS = new Set(["step", "result", "error"]);
 
 function isAbort(error) {
@@ -108,9 +116,10 @@ function safeDeliver(onEvent, event) {
 }
 
 export async function streamPlan(request, onEvent, { signal } = {}) {
-  const fail = (message) => {
-    safeDeliver(onEvent, { type: "error", data: { message } });
-    return { ok: false, message };
+  const fail = (errorInfo) => {
+    const errorData = typeof errorInfo === "string" ? { message: errorInfo } : errorInfo;
+    safeDeliver(onEvent, { type: "error", data: errorData });
+    return { ok: false, message: errorData.message };
   };
 
   let response;
@@ -131,7 +140,16 @@ export async function streamPlan(request, onEvent, { signal } = {}) {
     endSession();
     return fail(SESSION_ENDED);
   }
-  if (!response.ok) return fail(statusMessage(response.status, await readJson(response)));
+  if (!response.ok) {
+    if (response.status === 429) {
+      return fail({
+        code: "quota_reached",
+        message: MESSAGES.dailyLimit,
+        retryable: false,
+      });
+    }
+    return fail(statusMessage(response.status, await readJson(response)));
+  }
   if (!response.body) return fail(MESSAGES.badResponse);
 
   const reader = response.body.getReader();
